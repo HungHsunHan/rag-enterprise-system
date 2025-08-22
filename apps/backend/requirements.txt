@@ -1,0 +1,44 @@
+# Core FastAPI dependencies
+fastapi==0.111.0
+uvicorn[standard]==0.30.0
+
+# Database
+sqlalchemy==2.0.30
+alembic==1.13.1
+psycopg2-binary==2.9.9
+pgvector==0.2.5
+
+# Validation and Settings  
+pydantic==2.6.4
+pydantic-settings==2.2.1
+
+# Authentication
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# File handling
+python-multipart==0.0.9
+
+# Environment
+python-dotenv==1.0.1
+
+# HTTP client
+httpx==0.27.0
+
+# AI/ML
+langchain==0.2.11
+langchain-community==0.2.10
+sentence-transformers==2.7.0
+openai==1.30.5
+
+# Document processing
+pypdf==4.1.0
+python-docx==1.1.0
+
+# Development and testing
+pytest==8.2.2
+pytest-asyncio==0.23.7
+pytest-mock==3.12.0
+black==24.4.2
+ruff==0.4.10
+mypy==1.10.0

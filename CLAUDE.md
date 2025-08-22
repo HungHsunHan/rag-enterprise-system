@@ -1,0 +1,1 @@
+python 安裝與執行環境請使用 C:/Users/hunghsun/AppData/Local/anaconda3/envs/llm/python.exe
