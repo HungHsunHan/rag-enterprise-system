@@ -1,8 +1,7 @@
 from typing import List, Optional
 from sqlalchemy.orm import Session
 import logging
-import openai
-from openai import AsyncOpenAI
+import httpx
 
 from app.db.models import DocumentChunk
 from app.core.config import settings
@@ -17,23 +16,21 @@ class RAGService:
     """
     
     def __init__(self):
-        self.llm_client = None
-        self._initialize_llm_client()
+        self.openrouter_base_url = "https://openrouter.ai/api/v1"
+        self.api_key = settings.OPENROUTER_API_KEY
+        self.model = settings.LLM_MODEL
+        self._validate_config()
     
-    def _initialize_llm_client(self):
+    def _validate_config(self):
         """
-        Initialize LLM client (OpenAI)
+        Validate OpenRouter configuration
         """
-        if settings.OPENAI_API_KEY:
-            try:
-                self.llm_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-                logger.info("Initialized OpenAI client")
-            except Exception as e:
-                logger.error(f"Failed to initialize OpenAI client: {e}")
+        if not self.api_key:
+            logger.warning("OpenRouter API key not provided, using mock responses")
         else:
-            logger.warning("OpenAI API key not provided, using mock responses")
+            logger.info(f"Initialized OpenRouter client with model: {self.model}")
     
-    async def generate_answer(self, db: Session, question: str, company_id: str) -> str:
+    def generate_answer(self, db: Session, question: str, company_id: str) -> str:
         """
         Generate answer using RAG pipeline
         """
@@ -58,7 +55,7 @@ class RAGService:
             context = self._build_context(relevant_chunks)
             
             # Step 4: Generate answer using LLM
-            answer = await self._generate_llm_response(question, context)
+            answer = self._generate_llm_response(question, context)
             
             return answer
             
@@ -86,21 +83,28 @@ class RAGService:
         
         return "\n\n".join(context_parts)
     
-    async def _generate_llm_response(self, question: str, context: str) -> str:
+    def _generate_llm_response(self, question: str, context: str) -> str:
         """
-        Generate response using LLM
+        Generate response using OpenRouter LLM
         """
-        if not self.llm_client:
+        if not self.api_key:
             return self._mock_llm_response(question, context)
         
         try:
             # Construct prompt
             prompt = self._build_prompt(question, context)
             
-            # Call OpenAI API
-            response = await self.llm_client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
+            # Call OpenRouter API
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://github.com/anthropics/claude-code",  # Optional, for analytics
+                "X-Title": "HR Q&A System"  # Optional, for analytics
+            }
+            
+            payload = {
+                "model": self.model,
+                "messages": [
                     {
                         "role": "system",
                         "content": "You are a helpful HR assistant. Answer questions based on the provided context from company documents. Be professional, accurate, and concise."
@@ -110,14 +114,23 @@ class RAGService:
                         "content": prompt
                     }
                 ],
-                max_tokens=500,
-                temperature=0.7
-            )
+                "max_tokens": 500,
+                "temperature": 0.7
+            }
             
-            return response.choices[0].message.content.strip()
+            with httpx.Client(timeout=30.0) as client:
+                response = client.post(
+                    f"{self.openrouter_base_url}/chat/completions",
+                    headers=headers,
+                    json=payload
+                )
+                response.raise_for_status()
+                
+                result = response.json()
+                return result["choices"][0]["message"]["content"].strip()
             
         except Exception as e:
-            logger.error(f"LLM API error: {e}")
+            logger.error(f"OpenRouter API error: {e}")
             return self._mock_llm_response(question, context)
     
     def _build_prompt(self, question: str, context: str) -> str:
@@ -163,14 +176,6 @@ rag_service = RAGService()
 
 def generate_answer(db: Session, question: str, company_id: str) -> str:
     """
-    Synchronous wrapper for generate_answer (for backward compatibility)
+    Generate answer using RAG pipeline
     """
-    import asyncio
-    return asyncio.run(rag_service.generate_answer(db, question, company_id))
-
-
-async def generate_answer_async(db: Session, question: str, company_id: str) -> str:
-    """
-    Asynchronous version of generate_answer
-    """
-    return await rag_service.generate_answer(db, question, company_id)
+    return rag_service.generate_answer(db, question, company_id)

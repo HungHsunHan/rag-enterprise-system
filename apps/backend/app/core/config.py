@@ -5,7 +5,7 @@ from typing import List, Union
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file="../../.env",  # Read from root directory
         env_ignore_empty=True,
         extra="ignore"
     )
@@ -36,15 +36,19 @@ class Settings(BaseSettings):
     )
     
     # LLM API Configuration
-    OPENAI_API_KEY: str = Field(
+    OPENROUTER_API_KEY: str = Field(
         default="",
-        description="OpenAI API key for LLM integration"
+        description="OpenRouter API key for LLM integration"
+    )
+    LLM_MODEL: str = Field(
+        default="microsoft/phi-3-mini-128k-instruct:free",
+        description="LLM model to use through OpenRouter"
     )
     
     # Embedding Model
     EMBEDDING_MODEL: str = Field(
-        default="sentence-transformers/all-MiniLM-L6-v2",
-        description="Sentence transformer model for embeddings"
+        default="sentence-transformers/paraphrase-MiniLM-L3-v2",
+        description="Free sentence transformer model for embeddings"
     )
     EMBEDDING_DIMENSION: int = Field(
         default=384,

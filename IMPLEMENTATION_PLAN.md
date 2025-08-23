@@ -399,3 +399,36 @@ gantt
 - 智慧知識圖譜
 - 企業級安全和合規
 - 國際化和本地化
+
+---
+
+## Auth Smoke Test (Manual)
+
+- [ ] Backend: start FastAPI on 8000 (or via Docker)
+  - [ ] Local: uvicorn app.main:app --reload --port 8000 (run in apps/backend)
+  - [ ] Or: docker-compose up backend -d
+- [ ] Frontend (dev): leave VITE_API_BASE_URL unset to use proxy; run in apps/frontend
+  - [ ] npm install
+  - [ ] npm run dev
+- [ ] Admin flow
+  - [ ] Navigate to /login → Admin tab → login with valid admin
+  - [ ] Visit Companies page → verify 200 and data loads (Authorization header present)
+  - [ ] Refresh page → auth persists (persisted Zustand store)
+- [ ] User flow
+  - [ ] Navigate to /login → Employee tab → login using employee_id
+  - [ ] Open Chat → ask a question → verify answer returns
+  - [ ] Refresh page → auth persists
+- [ ] 401 handling
+  - [ ] Clear localStorage key "auth-storage" manually
+  - [ ] Trigger any protected API call → app auto-logs out and redirects to /login
+- [ ] Production behavior
+  - [ ] Set VITE_API_BASE_URL to your API origin (e.g., https://api.example.com)
+  - [ ] Build: npm run build; Serve the dist
+  - [ ] Confirm no mock-auth on failures in production (fallback gated to dev only)
+
+## Security and Auth Notes (Next Steps)
+
+- [ ] Employee login: add a secret (PIN/OTP/SSO), enable rate limiting, and audit logging
+- [ ] Consider adding /api/v1/me and populate user from server instead of client-side JWT decode
+- [ ] OAuth2PasswordBearer: either implement a proper /token flow or document/remove placeholder usage
+- [ ] Cleanup: remove deprecated authStore-simple.ts once all branches are merged and verified

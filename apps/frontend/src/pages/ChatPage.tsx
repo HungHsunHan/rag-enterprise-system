@@ -14,7 +14,7 @@ import {
   Alert
 } from '@mui/material'
 import { SendRounded, ThumbUpRounded, ThumbDownRounded } from '@mui/icons-material'
-import apiClient from '../api/client'
+import { userApi } from '../api/user'
 
 interface Message {
   id: string
@@ -26,12 +26,6 @@ interface Message {
   feedbackLoading?: boolean
 }
 
-interface FeedbackRequest {
-  messageId: string
-  question: string
-  answer: string
-  feedback: 'POSITIVE' | 'NEGATIVE'
-}
 
 interface FeedbackNotification {
   open: boolean
@@ -71,20 +65,16 @@ const ChatPage: React.FC = () => {
     setLoading(true)
 
     try {
-      // TODO: Call actual API
-      // const response = await chatApi.askQuestion({ question: inputMessage })
+      const response = await userApi.askQuestion({ question: inputMessage })
       
-      // Mock response for now
-      setTimeout(() => {
-        const assistantMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          type: 'assistant',
-          content: 'This is a mock response. The actual RAG system will be implemented to provide accurate answers based on your company\'s knowledge base.',
-          timestamp: new Date()
-        }
-        setMessages(prev => [...prev, assistantMessage])
-        setLoading(false)
-      }, 1000)
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        type: 'assistant',
+        content: response.answer,
+        timestamp: new Date()
+      }
+      setMessages(prev => [...prev, assistantMessage])
+      setLoading(false)
     } catch (error) {
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -133,15 +123,12 @@ const ChatPage: React.FC = () => {
     )
 
     try {
-      const feedbackRequest: FeedbackRequest = {
-        messageId,
+      // Submit feedback to API
+      await userApi.submitFeedback({
         question: userQuestion,
         answer: currentMessage.content,
         feedback: feedback.toUpperCase() as 'POSITIVE' | 'NEGATIVE'
-      }
-
-      // Submit feedback to API
-      await apiClient.post('/api/feedback', feedbackRequest)
+      })
 
       // Update message state on success
       setMessages(prev =>

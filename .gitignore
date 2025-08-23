@@ -50,6 +50,8 @@ logs/
 coverage/
 *.coverage
 htmlcov/
+.coverage.*
+*coverage*
 
 # Docker
 .dockerignore
@@ -57,3 +59,50 @@ htmlcov/
 # Temporary files
 *.tmp
 *.temp
+/tmp/
+
+# Test reports and artifacts
+test_report_*.json
+test_*.py
+*.pyc
+
+# Development and staging files
+STAGE_*_COMPLETION_REPORT.md
+*_PLAN.md
+UNIT_TEST_PLAN.md
+
+# Database migration files (keep only in version control if needed)
+# apps/backend/alembic/versions/*.py (uncomment to ignore)
+
+# Claude-specific files
+.CLAUDE.local.md
+CLAUDE.md.backup
+
+# macOS specific
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editor specific
+*.swp
+*.swo
+*~
+
+# Package managers
+package-lock.json.backup
+yarn.lock
+
+# Development tools
+.eslintrc.js
+
+# Runtime and process files
+*.pid
+*.seed
+
+# Documentation build files
+docs/_build/
+docs/.doctrees/
+
+# Local environment files
+.env.backup
+.env.*.local

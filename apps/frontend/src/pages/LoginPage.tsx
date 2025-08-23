@@ -14,6 +14,7 @@ import {
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { authApi } from '../api/auth'
+import { decodeJwt } from '../utils/jwt'
 
 interface TabPanelProps {
   children?: React.ReactNode
@@ -66,9 +67,14 @@ const LoginPage: React.FC = () => {
         password: adminPassword
       })
       
-      // Mock user data - in real app, decode from JWT or fetch user info
+      const claims = decodeJwt(response.access_token)
       login(
-        { id: '1', email: adminEmail, type: 'admin' },
+        {
+          id: (claims?.sub as string) ?? adminEmail,
+          email: adminEmail,
+          type: 'admin',
+          companyId: (claims?.company_id as string | undefined),
+        },
         response.access_token
       )
       
@@ -90,9 +96,14 @@ const LoginPage: React.FC = () => {
         employee_id: employeeId
       })
       
-      // Mock user data - in real app, decode from JWT or fetch user info
+      const claims = decodeJwt(response.access_token)
       login(
-        { id: '1', employeeId: employeeId, type: 'user', companyId: '1' },
+        {
+          id: (claims?.sub as string) ?? employeeId,
+          employeeId,
+          type: 'user',
+          companyId: (claims?.company_id as string | undefined),
+        },
         response.access_token
       )
       

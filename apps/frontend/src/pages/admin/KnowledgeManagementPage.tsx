@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import {
   Box,
   Typography,
@@ -20,68 +20,64 @@ import {
   FormControl,
   InputLabel,
   Select,
-  MenuItem
+  MenuItem,
+  Checkbox,
+  ListItemIcon,
+  Toolbar,
+  Snackbar
 } from '@mui/material'
 import {
   UploadFileRounded,
   DeleteRounded,
   FolderRounded,
-  DescriptionRounded
+  DescriptionRounded,
+  DeleteSweepRounded,
+  SelectAll
 } from '@mui/icons-material'
-
-interface KnowledgeDocument {
-  id: string
-  file_name: string
-  status: 'PROCESSING' | 'COMPLETED' | 'FAILED'
-  company_id: string
-  uploaded_at: string
-}
+import { adminApi } from '../../api/admin'
+import type { Company, KnowledgeDocument } from '../../api/admin'
 
 const KnowledgeManagementPage: React.FC = () => {
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([])
+  const [companies, setCompanies] = useState<Company[]>([])
   const [selectedCompany, setSelectedCompany] = useState('')
   const [uploading, setUploading] = useState(false)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [documentToDelete, setDocumentToDelete] = useState<string | null>(null)
+  const [selectedDocuments, setSelectedDocuments] = useState<Set<string>>(new Set())
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false)
+  const [successMessage, setSuccessMessage] = useState('')
   
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Mock companies data
-  const companies = [
-    { id: '1', name: 'Acme Corporation' },
-    { id: '2', name: 'Tech Innovators Ltd' }
-  ]
+  // Load companies on component mount
+  useEffect(() => {
+    loadCompanies()
+  }, [])
 
-  const handleCompanyChange = (companyId: string) => {
-    setSelectedCompany(companyId)
-    // TODO: Fetch documents for selected company
-    // fetchDocuments(companyId)
-    
-    // Mock documents for now
-    setDocuments([
-      {
-        id: '1',
-        file_name: 'Employee Handbook.pdf',
-        status: 'COMPLETED',
-        company_id: companyId,
-        uploaded_at: '2025-01-15T10:00:00Z'
-      },
-      {
-        id: '2',
-        file_name: 'HR Policies.docx',
-        status: 'PROCESSING',
-        company_id: companyId,
-        uploaded_at: '2025-01-20T14:30:00Z'
-      },
-      {
-        id: '3',
-        file_name: 'Benefits Guide.txt',
-        status: 'FAILED',
-        company_id: companyId,
-        uploaded_at: '2025-01-18T09:15:00Z'
-      }
-    ])
+  const loadCompanies = async () => {
+    try {
+      const companiesData = await adminApi.getCompanies()
+      setCompanies(companiesData)
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to load companies')
+    }
+  }
+
+
+  const loadDocuments = async (companyId: string) => {
+    setLoading(true)
+    setError('')
+    try {
+      const documentsData = await adminApi.getDocuments(companyId)
+      setDocuments(documentsData)
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to load documents')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleFileSelect = () => {
@@ -100,30 +96,10 @@ const KnowledgeManagementPage: React.FC = () => {
     setError('')
 
     try {
-      // TODO: Call actual API
-      // const formData = new FormData()
-      // formData.append('file', file)
-      // const response = await adminApi.uploadDocument(selectedCompany, formData)
+      const response = await adminApi.uploadDocument(selectedCompany, file)
       
-      // Mock upload for now
-      const newDocument: KnowledgeDocument = {
-        id: Date.now().toString(),
-        file_name: file.name,
-        status: 'PROCESSING',
-        company_id: selectedCompany,
-        uploaded_at: new Date().toISOString()
-      }
-      
-      setDocuments(prev => [newDocument, ...prev])
-      
-      // Simulate processing
-      setTimeout(() => {
-        setDocuments(prev => 
-          prev.map(doc => 
-            doc.id === newDocument.id ? { ...doc, status: 'COMPLETED' } : doc
-          )
-        )
-      }, 3000)
+      // Refresh documents list
+      await loadDocuments(selectedCompany)
       
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to upload document')
@@ -138,14 +114,68 @@ const KnowledgeManagementPage: React.FC = () => {
 
   const handleDeleteDocument = async (documentId: string) => {
     try {
-      // TODO: Call actual API
-      // await adminApi.deleteDocument(documentId)
+      await adminApi.deleteDocument(documentId)
       
-      setDocuments(prev => prev.filter(doc => doc.id !== documentId))
+      // Refresh documents list
+      if (selectedCompany) {
+        await loadDocuments(selectedCompany)
+      }
+      
       setDeleteDialogOpen(false)
       setDocumentToDelete(null)
+      setSuccessMessage('Document deleted successfully')
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to delete document')
+    }
+  }
+
+  const handleDocumentSelect = (documentId: string) => {
+    const newSelected = new Set(selectedDocuments)
+    if (newSelected.has(documentId)) {
+      newSelected.delete(documentId)
+    } else {
+      newSelected.add(documentId)
+    }
+    setSelectedDocuments(newSelected)
+  }
+
+  const handleSelectAll = () => {
+    if (selectedDocuments.size === documents.length) {
+      setSelectedDocuments(new Set())
+    } else {
+      setSelectedDocuments(new Set(documents.map(doc => doc.id)))
+    }
+  }
+
+  const handleBulkDelete = async () => {
+    if (selectedDocuments.size === 0) return
+
+    try {
+      const documentIds = Array.from(selectedDocuments)
+      const result = await adminApi.bulkDeleteDocuments(selectedCompany, documentIds)
+      
+      // Refresh documents list
+      await loadDocuments(selectedCompany)
+      
+      setSelectedDocuments(new Set())
+      setBulkDeleteDialogOpen(false)
+      
+      // Show success message with details
+      const { success_count, failed_count } = result.details
+      setSuccessMessage(`Bulk delete completed: ${success_count} documents deleted successfully${failed_count > 0 ? `, ${failed_count} failed` : ''}`)
+      
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to delete documents')
+    }
+  }
+
+  const handleCompanyChange = (companyId: string) => {
+    setSelectedCompany(companyId)
+    setSelectedDocuments(new Set()) // Clear selection when changing company
+    if (companyId) {
+      loadDocuments(companyId)
+    } else {
+      setDocuments([])
     }
   }
 
@@ -233,11 +263,58 @@ const KnowledgeManagementPage: React.FC = () => {
           {/* Documents List */}
           <Card>
             <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Knowledge Documents
-              </Typography>
+              <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                <Typography variant="h6">
+                  Knowledge Documents
+                </Typography>
+                {documents.length > 0 && (
+                  <Box display="flex" alignItems="center" gap={1}>
+                    <Button
+                      size="small"
+                      startIcon={<SelectAll />}
+                      onClick={handleSelectAll}
+                    >
+                      {selectedDocuments.size === documents.length ? 'Deselect All' : 'Select All'}
+                    </Button>
+                    {selectedDocuments.size > 0 && (
+                      <Button
+                        size="small"
+                        color="error"
+                        startIcon={<DeleteSweepRounded />}
+                        onClick={() => setBulkDeleteDialogOpen(true)}
+                      >
+                        Delete Selected ({selectedDocuments.size})
+                      </Button>
+                    )}
+                  </Box>
+                )}
+              </Box>
               
-              {documents.length === 0 ? (
+              {selectedDocuments.size > 0 && (
+                <Toolbar
+                  sx={{
+                    pl: { sm: 2 },
+                    pr: { xs: 1, sm: 1 },
+                    bgcolor: 'action.selected',
+                    borderRadius: 1,
+                    mb: 2
+                  }}
+                >
+                  <Typography
+                    sx={{ flex: '1 1 100%' }}
+                    color="inherit"
+                    variant="subtitle1"
+                  >
+                    {selectedDocuments.size} document(s) selected
+                  </Typography>
+                </Toolbar>
+              )}
+              
+              {loading ? (
+                <Box display="flex" justifyContent="center" py={4}>
+                  <LinearProgress sx={{ width: '50%' }} />
+                </Box>
+              ) : documents.length === 0 ? (
                 <Box 
                   display="flex" 
                   flexDirection="column" 
@@ -258,6 +335,13 @@ const KnowledgeManagementPage: React.FC = () => {
                       divider={index < documents.length - 1}
                       sx={{ pl: 0 }}
                     >
+                      <ListItemIcon>
+                        <Checkbox
+                          edge="start"
+                          checked={selectedDocuments.has(document.id)}
+                          onChange={() => handleDocumentSelect(document.id)}
+                        />
+                      </ListItemIcon>
                       <Box sx={{ mr: 2 }}>
                         {getFileIcon(document.file_name)}
                       </Box>
@@ -326,6 +410,49 @@ const KnowledgeManagementPage: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <Dialog
+        open={bulkDeleteDialogOpen}
+        onClose={() => setBulkDeleteDialogOpen(false)}
+      >
+        <DialogTitle>Confirm Bulk Delete</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete {selectedDocuments.size} document(s)? 
+            This action cannot be undone and will remove all associated chunks and embeddings.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setBulkDeleteDialogOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleBulkDelete}
+            color="error"
+            variant="contained"
+          >
+            Delete {selectedDocuments.size} Documents
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Success Message Snackbar */}
+      <Snackbar
+        open={!!successMessage}
+        autoHideDuration={6000}
+        onClose={() => setSuccessMessage('')}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setSuccessMessage('')}
+          severity="success"
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {successMessage}
+        </Alert>
+      </Snackbar>
     </Box>
   )
 }

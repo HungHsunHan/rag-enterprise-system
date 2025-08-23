@@ -1,4 +1,5 @@
 import apiClient from './client'
+import { mockLogin } from './mock-auth'
 
 export interface AdminLoginRequest {
   email: string
@@ -16,12 +17,28 @@ export interface AuthResponse {
 
 export const authApi = {
   adminLogin: async (data: AdminLoginRequest): Promise<AuthResponse> => {
-    const response = await apiClient.post('/api/v1/admin/login', data)
-    return response.data
+    try {
+      const response = await apiClient.post('/api/v1/admin/login', data)
+      return response.data
+    } catch (error) {
+      if (import.meta.env.DEV) {
+        console.warn('Backend unavailable, using mock authentication in DEV mode', error)
+        return await mockLogin.admin(data.email, data.password)
+      }
+      throw error
+    }
   },
 
   userLogin: async (data: UserLoginRequest): Promise<AuthResponse> => {
-    const response = await apiClient.post('/api/v1/login', data)
-    return response.data
+    try {
+      const response = await apiClient.post('/api/v1/login', data)
+      return response.data
+    } catch (error) {
+      if (import.meta.env.DEV) {
+        console.warn('Backend unavailable, using mock authentication in DEV mode', error)
+        return await mockLogin.user(data.employee_id)
+      }
+      throw error
+    }
   },
 }

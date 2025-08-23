@@ -17,12 +17,8 @@ import {
   CircularProgress
 } from '@mui/material'
 import { AddRounded, BusinessRounded } from '@mui/icons-material'
-
-interface Company {
-  id: string
-  name: string
-  created_at: string
-}
+import { adminApi } from '../../api/admin'
+import type { Company } from '../../api/admin'
 
 const CompaniesPage: React.FC = () => {
   const [companies, setCompanies] = useState<Company[]>([])
@@ -38,20 +34,11 @@ const CompaniesPage: React.FC = () => {
 
   const fetchCompanies = async () => {
     try {
-      // TODO: Call actual API
-      // const response = await adminApi.getCompanies()
-      // setCompanies(response.data)
-      
-      // Mock data for now
-      setTimeout(() => {
-        setCompanies([
-          { id: '1', name: 'Acme Corporation', created_at: '2025-01-15' },
-          { id: '2', name: 'Tech Innovators Ltd', created_at: '2025-01-20' }
-        ])
-        setLoading(false)
-      }, 1000)
+      const companiesData = await adminApi.getCompanies()
+      setCompanies(companiesData)
+      setLoading(false)
     } catch (err: any) {
-      setError('Failed to load companies')
+      setError(err.response?.data?.detail || 'Failed to load companies')
       setLoading(false)
     }
   }
@@ -63,16 +50,7 @@ const CompaniesPage: React.FC = () => {
     setError('')
 
     try {
-      // TODO: Call actual API
-      // const response = await adminApi.createCompany({ name: newCompanyName })
-      
-      // Mock response for now
-      const newCompany: Company = {
-        id: Date.now().toString(),
-        name: newCompanyName,
-        created_at: new Date().toISOString().split('T')[0]
-      }
-      
+      const newCompany = await adminApi.createCompany({ name: newCompanyName })
       setCompanies(prev => [...prev, newCompany])
       setDialogOpen(false)
       setNewCompanyName('')
@@ -147,7 +125,7 @@ const CompaniesPage: React.FC = () => {
                 >
                   <ListItemText
                     primary={company.name}
-                    secondary={`Created: ${company.created_at}`}
+                    secondary={`Created: ${new Date(company.created_at).toLocaleDateString()}`}
                   />
                 </ListItem>
               ))}

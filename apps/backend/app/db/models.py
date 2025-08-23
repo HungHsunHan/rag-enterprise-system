@@ -2,11 +2,10 @@ from datetime import datetime
 from sqlalchemy import Column, String, DateTime, ForeignKey, Text, UniqueConstraint, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-from sqlalchemy.ext.declarative import declarative_base
 from pgvector.sqlalchemy import Vector
 import uuid
 
-Base = declarative_base()
+from app.db.database import Base
 
 
 class Company(Base):
@@ -64,13 +63,20 @@ class KnowledgeDocument(Base):
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     file_name = Column(String(255), nullable=False)
+    original_name = Column(String(255), nullable=False)  # Original filename without version suffix
+    version = Column(Integer, nullable=False, default=1)
     status = Column(String(50), nullable=False, default="PROCESSING")  # PROCESSING, COMPLETED, FAILED
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False)
+    parent_document_id = Column(UUID(as_uuid=True), ForeignKey("knowledge_documents.id"), nullable=True)  # For versioning
     uploaded_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    file_size = Column(Integer, nullable=True)  # File size in bytes
+    content_hash = Column(String(64), nullable=True)  # SHA-256 hash for duplicate detection
+    tags = Column(String(500), nullable=True)  # Comma-separated tags
     
     # Relationships
     company = relationship("Company", back_populates="knowledge_documents")
     document_chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan")
+    parent_document = relationship("KnowledgeDocument", remote_side=[id], backref="versions")
 
 
 class DocumentChunk(Base):
