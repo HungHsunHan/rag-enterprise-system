@@ -5,7 +5,9 @@
       "Bash(npm create:*)",
       "Bash(npm install)",
       "Bash(npm install:*)",
-      "Bash(alembic init:*)"
+      "Bash(alembic init:*)",
+      "Bash(docker-compose exec postgres psql:*)",
+      "Bash(docker-compose exec:*)"
     ],
     "deny": [],
     "ask": []

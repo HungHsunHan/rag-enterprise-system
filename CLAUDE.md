@@ -2,238 +2,200 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Development Commands
+## Commands
 
-### Project Setup
+### Development
 ```bash
-# Start development environment (databases + install deps + init data)
-./scripts/dev-setup.sh
+# Start all services
+npm run dev                    # Both frontend (3000) and backend (8000)
+npm run dev:frontend           # Frontend only
+npm run dev:backend            # Backend only
 
-# Start both frontend and backend
-npm run dev
-
-# Start services individually  
-npm run dev:frontend    # React frontend on port 3000
-npm run dev:backend     # FastAPI backend on port 8000
+# One-time setup
+./scripts/dev-setup.sh         # Automated environment setup
 ```
 
-### Development Workflow
+### Testing
 ```bash
-# Building
-npm run build           # Build frontend for production
+# Run all tests
+npm run test                   # Both frontend and backend tests
+npm run test:frontend          # Frontend tests only
+npm run test:backend           # Backend tests with pytest
 
-# Testing
-npm run test            # Run all tests (frontend + backend)
-npm run test:frontend   # Run frontend tests (vitest)
-npm run test:backend    # Run backend tests (pytest)
-
-# Code Quality
-npm run lint            # Lint all code
-npm run format          # Format all code
-npm run lint:frontend   # ESLint frontend
-npm run lint:backend    # Ruff backend  
-npm run format:frontend # Prettier frontend
-npm run format:backend  # Black + Ruff backend
+# Backend testing (from apps/backend/)
+python -m pytest              # All tests
+python -m pytest --cov=app    # With coverage
+python -m pytest tests/test_specific.py  # Specific test file
 ```
 
-### Backend-Specific Commands (from apps/backend/)
+### Code Quality
 ```bash
-# Database migrations
-python -m alembic upgrade head
-python -m alembic revision --autogenerate -m "description"
+# Lint and format all code
+npm run lint                   # Both frontend and backend
+npm run format                 # Format all code
 
-# Testing with coverage
-python -m pytest --cov=app --cov-report=html tests/
-python -m pytest tests/test_specific.py     # Run specific test
-python -m pytest -v                         # Verbose output
-
-# Code quality
-black .                 # Format code
-ruff check .            # Lint code
-ruff check . --fix      # Auto-fix linting issues
-mypy .                  # Type checking
+# Backend specific (from apps/backend/)
+ruff check .                   # Lint
+ruff check . --fix             # Auto-fix issues
+black .                        # Format code
+mypy .                         # Type check
 ```
 
-### Database Management
+### Database
 ```bash
-# Start/stop database services
-docker-compose up -d postgres redis
-docker-compose down
+# Docker database services
+docker-compose up -d postgres redis      # Start services
+docker-compose ps                         # Check status
+docker-compose logs postgres              # View logs
 
-# Check service status
-docker-compose ps
-docker-compose logs postgres
+# Database migrations (from apps/backend/)
+python -m alembic upgrade head                           # Apply migrations
+python -m alembic revision --autogenerate -m "message"  # Create migration
 
-# Database access
+# Direct database access
 docker-compose exec postgres psql -U postgres -d hr_chatbot
-
-# Reset database (destructive!)
-docker-compose down -v && docker-compose up -d postgres redis
 ```
 
 ## Architecture Overview
 
-### Technology Stack
-**Frontend**: React 18 + TypeScript + Vite + Material-UI + Zustand + React Router
-**Backend**: FastAPI + SQLAlchemy + Alembic + Pydantic + JWT authentication  
-**Database**: PostgreSQL with PGVector extension + Redis for caching
-**AI/ML**: OpenRouter API + Sentence Transformers + PGVector similarity search
+This is a **multi-tenant RAG enterprise system** with strict company-level data isolation:
 
-### Monorepo Structure
+### Technology Stack
+- **Frontend**: React 18 + TypeScript + Vite + MUI + Zustand
+- **Backend**: FastAPI + SQLAlchemy + PostgreSQL + PGVector
+- **AI/ML**: OpenRouter API + Sentence Transformers + RAG
+- **Infrastructure**: Docker Compose for local development
+
+### Key Components
+
+**Monorepo Structure**:
 ```
 apps/
-├── frontend/           # React TypeScript application
-│   ├── src/api/       # Backend API clients (auth, admin, user)
-│   ├── src/components/# Reusable UI components  
-│   ├── src/pages/     # Page components (Login, Chat, Admin)
-│   ├── src/store/     # Zustand state management
-│   └── src/styles/    # MUI theme configuration
-└── backend/           # FastAPI Python application
-    ├── app/api/       # API route handlers (auth, chat, admin)
-    ├── app/core/      # Configuration and security
-    ├── app/db/        # SQLAlchemy models and database
-    ├── app/schemas/   # Pydantic validation models
-    ├── app/services/  # Business logic layer
-    ├── alembic/       # Database migrations
-    └── tests/         # Backend tests
+├── frontend/          # React TypeScript app
+│   ├── src/api/      # Backend API clients
+│   ├── src/pages/    # Page components (admin/*, chat, login)
+│   └── src/store/    # Zustand state management
+└── backend/           # FastAPI Python app
+    ├── app/api/      # Route handlers (auth, admin, chat)
+    ├── app/services/ # Business logic layer
+    └── tests/        # 46+ unit tests with >90% coverage
 ```
 
-### Multi-Tenant Architecture
-- **Data Isolation**: All queries filtered by `company_id`
-- **Admin Access**: Full system administration (companies, users, documents)
-- **Employee Access**: Company-scoped access with employee ID authentication
-- **Security**: JWT tokens, bcrypt hashing, input validation, SQL injection prevention
-
-### Key Services
-- **RAG Service** (`app/services/rag_service.py`): Core Q&A engine with vector similarity search
-- **Document Service** (`app/services/document_service.py`): File upload, processing, and vectorization
-- **Auth Service** (`app/services/auth_service.py`): JWT authentication for admins and employees
-- **Company Service** (`app/services/company_service.py`): Multi-tenant company management
-
-## Development Guidelines
+**Multi-Tenant Architecture**:
+- **Companies**: UUID-based tenant isolation
+- **Users**: Employee ID authentication, company-scoped access
+- **Admins**: Global system administrators with full access
+- **Documents**: Company-private or shared (共同) across all companies
+- **RAG System**: Automatic company filtering + shared content inclusion
 
 ### Database Schema
-Core tables: `companies`, `admins`, `users`, `knowledge_documents`, `document_chunks`, `feedback_logs`
-- Uses UUID primary keys for companies
-- PGVector extension for document embeddings (384 dimensions)
-- Multi-tenant isolation via company_id foreign keys
+- `companies` - Multi-tenant organizations
+- `admins` - System administrators  
+- `users` - Company employees with names and employee IDs
+- `knowledge_documents` - Uploaded files with shared/private classification
+- `document_chunks` - Text segments with vector embeddings
+- `llm_models` - Dynamic LLM model management
+- `feedback_logs` - User interaction tracking
 
-### Authentication Flow
-- **Admin Login**: Email + password → JWT token with admin privileges
-- **Employee Login**: Employee ID only → JWT token scoped to company
-- **JWT Tokens**: Include user_id, company_id, is_admin claims
-- **Protected Routes**: All API endpoints except auth require valid JWT
+### Authentication System
+- **Admin Auth**: Email/password with JWT tokens
+- **Employee Auth**: Employee ID only (development mode)
+- **Company Isolation**: All queries automatically filtered by company_id
+- **Shared Content**: Documents marked as 共同 accessible to all companies
 
-### Frontend State Management
-- **Zustand Store** (`src/store/authStore.ts`): Centralized auth state with persistence
-- **API Clients**: Axios-based with automatic JWT token injection
-- **Error Handling**: Automatic token refresh and logout on 401 responses
+## AI/ML Configuration
 
-### Testing Strategy
-- **Backend**: Pytest with fixtures for database isolation between tests
-- **Frontend**: Vitest for unit tests, Playwright for e2e tests
-- **Coverage**: Maintain >80% test coverage for business logic
-- **Integration**: Test multi-tenant data isolation and auth flows
-
-### File Processing Pipeline
-1. Upload via multipart form to `/api/documents/upload`
-2. Extract text from PDF/DOCX/TXT using pypdf/python-docx
-3. Split text into chunks with overlapping windows
-4. Generate embeddings using sentence-transformers
-5. Store vectors in PGVector with company isolation
-6. Enable semantic search via cosine similarity
-
-### RAG Q&A Flow
-1. Employee question → vector embedding
-2. Similarity search in company-scoped document_chunks
-3. Retrieve top K relevant chunks as context
-4. Construct prompt with context + question
-5. Send to OpenRouter LLM API (free models available)
-6. Return generated answer to frontend
-
-## Environment Configuration
-
-### Required Environment Variables (.env)
+### Environment Variables (.env)
 ```bash
-# LLM Configuration (OpenRouter)
-OPENROUTER_API_KEY=your-openrouter-api-key
+# LLM Configuration
+OPENROUTER_API_KEY=your-key-here
 LLM_MODEL=microsoft/phi-3-mini-128k-instruct:free
 
-# Embedding Configuration  
+# Embeddings
 EMBEDDING_MODEL=sentence-transformers/paraphrase-MiniLM-L3-v2
 EMBEDDING_DIMENSION=384
 
 # Database
 DATABASE_URL=postgresql://postgres:password@localhost:5432/hr_chatbot
-
-# Security
-SECRET_KEY=your-secret-key-change-in-production
-JWT_ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
 ```
 
-### Development Access Points
-- **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:8000
-- **API Docs**: http://localhost:8000/docs
-- **Admin Dashboard**: http://localhost:3000/admin
+### Document Processing Workflow
+1. **Upload**: Multi-format support (.pdf, .docx, .txt)
+2. **Processing**: Two-phase with configurable chunk size/overlap
+3. **Vectorization**: Sentence Transformers → PGVector storage
+4. **Company Scoping**: Automatic isolation + shared content support
 
-### Development Credentials
-**Admin**: `admin@dev.com` / `admin123`
-**Employees**: Use employee IDs like `EMP001`, `EMP002`, `DEV001`, `TEST001`
+### RAG Query Flow
+1. **Authentication**: Verify user's company context
+2. **Query Vectorization**: Convert question to embeddings
+3. **Similarity Search**: Company-scoped + shared documents
+4. **Context Assembly**: Build prompt with relevant chunks
+5. **LLM Generation**: OpenRouter API call with context
+6. **Response**: Return answer with source tracking
 
-## Common Issues and Solutions
+## Development Guidelines
 
-### Backend Won't Start
-```bash
-# Check Python environment (requires 3.9+)
-python --version
-pip list | grep fastapi
+### Critical Security Patterns
+- **Never bypass company isolation**: All database queries must include company_id filtering
+- **Shared documents**: Use explicit shared=True for cross-company content
+- **Multi-tenant testing**: Always test with multiple companies in database
 
-# Verify database connection
-docker-compose ps
-docker-compose logs postgres
-```
+### Backend Service Layer
+- `auth_service.py` - JWT and company authentication
+- `rag_service.py` - Core RAG logic with company scoping
+- `document_service.py` - File processing and storage
+- `company_service.py` - Multi-tenant company management
+- `user_service.py` - Employee management with company association
 
-### Frontend Build Errors
-```bash
-# Clear cache and reinstall dependencies
-rm -rf node_modules package-lock.json
-npm install
+### Frontend State Management
+- `authStore.ts` - Zustand store for authentication state
+- JWT token persistence in localStorage with automatic refresh
+- Company context maintained throughout user session
 
-# Check Node.js version (requires 20+)
-node --version
-```
+### Testing Strategy
+- **46+ unit tests** with >90% coverage
+- **Multi-tenant isolation testing** - Critical for security
+- **RAG functionality tests** - Query scoping and shared content
+- **Document workflow tests** - Upload, processing, status tracking
+- **Admin API tests** - Company and user management
 
-### Database Connection Issues
-```bash
-# Test database connectivity
-docker-compose exec postgres pg_isready -U postgres
+## Common Development Tasks
 
-# Reset database completely
-docker-compose down -v
-docker-compose up -d postgres redis
-# Wait 10 seconds, then initialize with dev data
-```
+### Adding New API Endpoint
+1. Define route in `apps/backend/app/api/`
+2. Create Pydantic schemas in `apps/backend/app/schemas/`
+3. Implement service logic with company isolation
+4. Add comprehensive tests in `apps/backend/tests/`
+5. Create frontend API client in `apps/frontend/src/api/`
 
-### Port Conflicts
-```bash
-# Check what's using the ports
-lsof -i :3000  # Frontend
-lsof -i :8000  # Backend
-lsof -i :5432  # PostgreSQL
+### Database Schema Changes
+1. Create Alembic migration: `alembic revision --autogenerate -m "description"`
+2. Update SQLAlchemy models in `apps/backend/app/db/models.py`
+3. Update Pydantic schemas if needed
+4. Test migration: `alembic upgrade head`
 
-# Kill processes if needed
-kill -9 $(lsof -ti:3000)
-```
+### Frontend Component Development
+1. Follow MUI design system patterns
+2. Use Zustand for state management
+3. Implement proper error handling and loading states
+4. Ensure responsive design for admin interfaces
 
-## Implementation Notes
+## Production Considerations
 
-The system is currently in active development with comprehensive testing and monitoring features implemented. The codebase follows clean architecture principles with clear separation between API routes, business logic services, and data access layers.
+### Security Requirements
+- Change default SECRET_KEY in production
+- Implement proper employee authentication (not just employee ID)
+- Enable HTTPS and secure headers
+- Regular security audits for multi-tenant isolation
 
-When making changes:
-1. Follow existing patterns in the codebase
-2. Maintain multi-tenant data isolation
-3. Update tests for new functionality
-4. Run linting and formatting before committing
-5. Test both admin and employee user flows
+### Performance Optimization  
+- PGVector index optimization for large document sets
+- Redis caching for frequently accessed data
+- Connection pooling for database connections
+- Batch processing for document uploads
+
+### Deployment Requirements
+- PostgreSQL with PGVector extension
+- Redis for caching and sessions
+- Environment-specific configuration
+- Health check endpoints for monitoring

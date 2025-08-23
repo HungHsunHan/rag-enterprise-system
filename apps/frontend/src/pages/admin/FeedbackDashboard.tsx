@@ -32,7 +32,8 @@ import {
   TrendingDown,
   Assessment
 } from '@mui/icons-material'
-import { apiClient } from '../../api/client'
+import { adminApi } from '../../api/admin'
+import type { Company } from '../../api/admin'
 
 interface Feedback {
   id: string
@@ -64,15 +65,20 @@ const FeedbackDashboard: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('')
   const [feedbackFilter, setFeedbackFilter] = useState<string>('all')
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>('')
+  const [companies, setCompanies] = useState<Company[]>([])
+  const [expandedAnswers, setExpandedAnswers] = useState<Set<string>>(new Set())
   
   const itemsPerPage = 20
 
-  // Mock company data - in real app, this would come from API
-  const companies = [
-    { id: '1', name: 'Tech Corp' },
-    { id: '2', name: 'Finance Ltd' },
-    { id: '3', name: 'Healthcare Inc' }
-  ]
+  const loadCompanies = async () => {
+    try {
+      const companiesData = await adminApi.getCompanies()
+      setCompanies(companiesData)
+    } catch (err: any) {
+      console.error('Failed to load companies:', err)
+      setError('Failed to load companies. Please refresh the page.')
+    }
+  }
 
   const loadFeedbackData = async () => {
     if (!selectedCompanyId) return
@@ -82,22 +88,18 @@ const FeedbackDashboard: React.FC = () => {
     
     try {
       // Load feedback list
-      const params = new URLSearchParams({
-        company_id: selectedCompanyId,
-        limit: itemsPerPage.toString(),
-        offset: ((page - 1) * itemsPerPage).toString()
-      })
-      
-      if (feedbackFilter !== 'all') {
-        params.append('feedback_type', feedbackFilter.toUpperCase())
-      }
-      
-      const feedbackResponse = await apiClient.get(`/api/admin/feedback?${params}`)
-      setFeedbackList(feedbackResponse.data)
+      const feedbackType = feedbackFilter !== 'all' ? feedbackFilter.toUpperCase() : undefined
+      const feedbackResponse = await adminApi.getFeedback(
+        selectedCompanyId,
+        feedbackType,
+        itemsPerPage,
+        (page - 1) * itemsPerPage
+      )
+      setFeedbackList(feedbackResponse)
       
       // Load stats
-      const statsResponse = await apiClient.get(`/api/admin/feedback/stats?company_id=${selectedCompanyId}`)
-      setStats(statsResponse.data)
+      const statsResponse = await adminApi.getFeedbackStats(selectedCompanyId)
+      setStats(statsResponse)
       
     } catch (error) {
       console.error('Error loading feedback data:', error)
@@ -117,15 +119,13 @@ const FeedbackDashboard: React.FC = () => {
     setError(null)
     
     try {
-      const params = new URLSearchParams({
-        company_id: selectedCompanyId,
-        search_term: searchTerm,
-        limit: itemsPerPage.toString(),
-        offset: ((page - 1) * itemsPerPage).toString()
-      })
-      
-      const response = await apiClient.get(`/api/admin/feedback/search?${params}`)
-      setFeedbackList(response.data)
+      const response = await adminApi.searchFeedback(
+        selectedCompanyId,
+        searchTerm,
+        itemsPerPage,
+        (page - 1) * itemsPerPage
+      )
+      setFeedbackList(response)
       
     } catch (error) {
       console.error('Error searching feedback:', error)
@@ -134,6 +134,10 @@ const FeedbackDashboard: React.FC = () => {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    loadCompanies()
+  }, [])
 
   useEffect(() => {
     if (selectedCompanyId) {
@@ -152,6 +156,16 @@ const FeedbackDashboard: React.FC = () => {
 
   const truncateText = (text: string, maxLength: number = 100) => {
     return text.length > maxLength ? `${text.substring(0, maxLength)}...` : text
+  }
+
+  const toggleAnswerExpansion = (feedbackId: string) => {
+    const newExpanded = new Set(expandedAnswers)
+    if (newExpanded.has(feedbackId)) {
+      newExpanded.delete(feedbackId)
+    } else {
+      newExpanded.add(feedbackId)
+    }
+    setExpandedAnswers(newExpanded)
   }
 
   return (
@@ -319,9 +333,26 @@ const FeedbackDashboard: React.FC = () => {
                           </Typography>
                         </TableCell>
                         <TableCell sx={{ maxWidth: 300 }}>
-                          <Typography variant="body2" title={feedback.answer}>
-                            {truncateText(feedback.answer, 150)}
-                          </Typography>
+                          <Box
+                            sx={{
+                              cursor: feedback.answer.length > 150 ? 'pointer' : 'default',
+                              '&:hover': {
+                                backgroundColor: feedback.answer.length > 150 ? 'action.hover' : 'transparent'
+                              }
+                            }}
+                            onClick={() => feedback.answer.length > 150 && toggleAnswerExpansion(feedback.id)}
+                          >
+                            <Typography variant="body2" title={feedback.answer}>
+                              {expandedAnswers.has(feedback.id) 
+                                ? feedback.answer 
+                                : truncateText(feedback.answer, 150)}
+                            </Typography>
+                            {feedback.answer.length > 150 && (
+                              <Typography variant="caption" color="primary" sx={{ display: 'block', mt: 0.5 }}>
+                                {expandedAnswers.has(feedback.id) ? 'Click to collapse' : 'Click to expand'}
+                              </Typography>
+                            )}
+                          </Box>
                         </TableCell>
                         <TableCell>
                           <Chip

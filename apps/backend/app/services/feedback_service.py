@@ -36,11 +36,12 @@ def get_feedback_list(
     feedback_type: Optional[str] = None,
     limit: int = 100,
     offset: int = 0
-) -> List[FeedbackLog]:
+) -> List[dict]:
     """
     Get paginated feedback list for a company
     Optionally filter by feedback type (POSITIVE/NEGATIVE)
     Include proper multi-tenant filtering
+    Returns list of dictionaries with UUID fields converted to strings
     """
     try:
         query = db.query(FeedbackLog).join(User).filter(
@@ -56,8 +57,20 @@ def get_feedback_list(
             FeedbackLog.created_at.desc()
         ).offset(offset).limit(limit).all()
         
-        logger.info(f"Retrieved {len(feedback_list)} feedback records for company {company_id}")
-        return feedback_list
+        # Convert to dict with proper string conversion for UUIDs
+        result = []
+        for feedback in feedback_list:
+            result.append({
+                'id': str(feedback.id),
+                'user_id': str(feedback.user_id) if feedback.user_id else None,
+                'question': feedback.question,
+                'answer': feedback.answer,
+                'feedback': feedback.feedback,
+                'created_at': feedback.created_at
+            })
+        
+        logger.info(f"Retrieved {len(result)} feedback records for company {company_id}")
+        return result
         
     except Exception as e:
         logger.error(f"Error retrieving feedback list for company {company_id}: {e}")
@@ -69,30 +82,30 @@ def get_feedback_stats(db: Session, company_id: str) -> dict:
     Return statistics like total feedback count, positive count, negative count, positive percentage
     """
     try:
-        # Get total count and positive count in one query
-        stats_query = db.query(
-            func.count(FeedbackLog.id).label('total_count'),
-            func.sum(
-                func.case(
-                    (FeedbackLog.feedback == 'POSITIVE', 1),
-                    else_=0
-                )
-            ).label('positive_count')
-        ).join(User).filter(
+        # Get total count
+        total_count = db.query(func.count(FeedbackLog.id)).join(User).filter(
             User.company_id == company_id
-        ).first()
+        ).scalar() or 0
         
-        total_count = stats_query.total_count or 0
-        positive_count = stats_query.positive_count or 0
-        negative_count = total_count - positive_count
+        # Get positive count
+        positive_count = db.query(func.count(FeedbackLog.id)).join(User).filter(
+            User.company_id == company_id,
+            FeedbackLog.feedback == 'POSITIVE'
+        ).scalar() or 0
+        
+        # Get negative count
+        negative_count = db.query(func.count(FeedbackLog.id)).join(User).filter(
+            User.company_id == company_id,
+            FeedbackLog.feedback == 'NEGATIVE'
+        ).scalar() or 0
         
         # Calculate positive percentage
         positive_percentage = (positive_count / total_count * 100) if total_count > 0 else 0
         
         stats = {
-            'total_count': total_count,
-            'positive_count': positive_count,
-            'negative_count': negative_count,
+            'total_count': int(total_count),
+            'positive_count': int(positive_count),
+            'negative_count': int(negative_count),
             'positive_percentage': round(positive_percentage, 2)
         }
         
@@ -115,9 +128,10 @@ def search_feedback(
     search_term: str,
     limit: int = 100,
     offset: int = 0
-) -> List[FeedbackLog]:
+) -> List[dict]:
     """
     Search feedback by question or answer content
+    Returns list of dictionaries with UUID fields converted to strings
     """
     try:
         if not search_term or not search_term.strip():
@@ -136,8 +150,20 @@ def search_feedback(
             FeedbackLog.created_at.desc()
         ).offset(offset).limit(limit).all()
         
-        logger.info(f"Found {len(feedback_list)} feedback records matching '{search_term}' for company {company_id}")
-        return feedback_list
+        # Convert to dict with proper string conversion for UUIDs
+        result = []
+        for feedback in feedback_list:
+            result.append({
+                'id': str(feedback.id),
+                'user_id': str(feedback.user_id) if feedback.user_id else None,
+                'question': feedback.question,
+                'answer': feedback.answer,
+                'feedback': feedback.feedback,
+                'created_at': feedback.created_at
+            })
+        
+        logger.info(f"Found {len(result)} feedback records matching '{search_term}' for company {company_id}")
+        return result
         
     except Exception as e:
         logger.error(f"Error searching feedback for company {company_id} with term '{search_term}': {e}")

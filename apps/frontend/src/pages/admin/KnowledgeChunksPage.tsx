@@ -34,6 +34,8 @@ import {
   Visibility
 } from '@mui/icons-material'
 import { apiClient } from '../../api/client'
+import { adminApi } from '../../api/admin'
+import type { Company } from '../../api/admin'
 
 interface DocumentChunk {
   id: string
@@ -57,15 +59,23 @@ const KnowledgeChunksPage: React.FC = () => {
   const [selectedChunk, setSelectedChunk] = useState<DocumentChunk | null>(null)
   const [viewDialogOpen, setViewDialogOpen] = useState(false)
   const [totalChunks, setTotalChunks] = useState(0)
+  const [companies, setCompanies] = useState<Company[]>([])
   
   const itemsPerPage = 20
 
-  // Mock company data - in real app, this would come from API
-  const companies = [
-    { id: '1', name: 'Tech Corp' },
-    { id: '2', name: 'Finance Ltd' },
-    { id: '3', name: 'Healthcare Inc' }
-  ]
+  // Load companies on component mount
+  useEffect(() => {
+    loadCompanies()
+  }, [])
+
+  const loadCompanies = async () => {
+    try {
+      const companiesData = await adminApi.getCompanies()
+      setCompanies(companiesData)
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to load companies')
+    }
+  }
 
   const loadChunks = async () => {
     if (!selectedCompanyId) return
@@ -80,7 +90,7 @@ const KnowledgeChunksPage: React.FC = () => {
         offset: ((page - 1) * itemsPerPage).toString()
       })
       
-      const response = await apiClient.get<ChunksResponse>(`/api/admin/knowledge/chunks?${params}`)
+      const response = await apiClient.get<ChunksResponse>(`/api/v1/admin/knowledge/chunks?${params}`)
       setChunks(response.data.chunks)
       setTotalChunks(response.data.chunks.length) // This should come from a total count in the API
       
@@ -107,7 +117,7 @@ const KnowledgeChunksPage: React.FC = () => {
       
       // Note: This is a simplified search - in a real implementation,
       // you would have a dedicated search endpoint for chunks
-      const response = await apiClient.get<ChunksResponse>(`/api/admin/knowledge/chunks?${searchParams}`)
+      const response = await apiClient.get<ChunksResponse>(`/api/v1/admin/knowledge/chunks?${searchParams}`)
       
       // Filter results client-side for demo (should be done server-side in production)
       const filteredChunks = searchTerm.trim() 

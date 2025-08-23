@@ -189,9 +189,15 @@ async def upload_document(db: Session, file: UploadFile, company_id: Optional[st
     
     logger.info(f"Created document {document.file_name} (version {version}) with hash {content_hash[:8]}")
     
-    # Save file content temporarily for later processing
-    # In production, you might want to store this in a file storage service
-    # For now, we'll store it in memory or implement file storage
+    # Immediately process the document with the real file content
+    # This ensures we extract actual text instead of using simulated content
+    try:
+        # Start background processing with the actual file content
+        asyncio.create_task(process_document_async(str(document.id), file_content, file.filename))
+        logger.info(f"Started background processing for document {document.id}")
+    except Exception as e:
+        logger.error(f"Failed to start processing for document {document.id}: {e}")
+        # Don't fail the upload if background processing fails to start
     
     return document
 
@@ -249,11 +255,11 @@ async def process_document_with_params(document_id: str, chunk_size: int, overla
             logger.error(f"Document {document_id} not found")
             return
         
-        # For simulation, we'll create some dummy chunks
-        # In real implementation, you'd process the actual file content
+        # TEMPORARY FIX: For now, we'll notify that reprocessing isn't supported
+        # In a real implementation, you'd retrieve the file content from storage
         try:
-            # Simulate text extraction and chunking
-            dummy_text = f"This is simulated content for document {document.file_name}. " * 100
+            logger.error(f"Manual reprocessing not supported - original file content not stored")
+            raise ValueError("Manual reprocessing is not supported in the current implementation. Please re-upload the file.")
             
             # Create chunks based on parameters
             chunks = []

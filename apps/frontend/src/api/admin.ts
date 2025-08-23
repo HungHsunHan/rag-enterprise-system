@@ -13,7 +13,7 @@ export interface CompanyCreate {
 export interface KnowledgeDocument {
   id: string
   file_name: string
-  status: 'PROCESSING' | 'COMPLETED' | 'FAILED'
+  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
   company_id: string
   uploaded_at: string
 }
@@ -24,6 +24,21 @@ export interface DocumentChunk {
   chunk_text: string
   chunk_index: number
   created_at: string
+}
+
+export interface DocumentProcessRequest {
+  chunk_size: number
+  overlap_length: number
+}
+
+export interface DocumentProcessingStatus {
+  document_id: string
+  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
+  chunk_size?: number
+  overlap_length?: number
+  chunks_count: number
+  uploaded_at: string
+  is_shared: boolean
 }
 
 export interface FeedbackStats {
@@ -42,6 +57,28 @@ export interface FeedbackResponse {
   created_at: string
 }
 
+export interface CompanyMetrics {
+  company_id: string
+  company_name: string
+  user_count: number
+  document_count: number
+  queries_today: number
+}
+
+export interface DashboardMetrics {
+  total_companies: number
+  shared_documents_count: number
+  company_metrics: CompanyMetrics[]
+  timestamp: string
+}
+
+export interface SystemSummary {
+  total_users: number
+  total_documents: number
+  total_queries_today: number
+  total_companies: number
+}
+
 class AdminApi {
   // Company Management
   async getCompanies(): Promise<Company[]> {
@@ -51,6 +88,11 @@ class AdminApi {
 
   async createCompany(companyData: CompanyCreate): Promise<Company> {
     const response = await apiClient.post('/api/v1/admin/companies', companyData)
+    return response.data
+  }
+
+  async deleteCompany(companyId: string): Promise<{ message: string }> {
+    const response = await apiClient.delete(`/api/v1/admin/companies/${companyId}`)
     return response.data
   }
 
@@ -89,6 +131,16 @@ class AdminApi {
     return response.data
   }
 
+  async processDocument(documentId: string, processParams: DocumentProcessRequest): Promise<{ message: string; document_id: string; status: string; chunk_size: number; overlap_length: number; chunks_created: number }> {
+    const response = await apiClient.post(`/api/v1/admin/knowledge/documents/${documentId}/process`, processParams)
+    return response.data
+  }
+
+  async getDocumentProcessingStatus(documentId: string): Promise<DocumentProcessingStatus> {
+    const response = await apiClient.get(`/api/v1/admin/knowledge/documents/${documentId}/status`)
+    return response.data
+  }
+
   // Knowledge Chunks
   async getKnowledgeChunks(companyId: string, limit: number = 100, offset: number = 0): Promise<{chunks: DocumentChunk[]}> {
     const response = await apiClient.get(`/api/v1/admin/knowledge/chunks?company_id=${companyId}&limit=${limit}&offset=${offset}`)
@@ -114,8 +166,19 @@ class AdminApi {
     const response = await apiClient.get(`/api/v1/admin/feedback/search?company_id=${companyId}&search_term=${searchTerm}&limit=${limit}&offset=${offset}`)
     return response.data
   }
+
+  // Dashboard Metrics
+  async getDashboardMetrics(): Promise<DashboardMetrics> {
+    const response = await apiClient.get('/api/v1/admin/dashboard/metrics')
+    return response.data
+  }
+
+  async getSystemSummary(): Promise<SystemSummary> {
+    const response = await apiClient.get('/api/v1/admin/dashboard/summary')
+    return response.data
+  }
 }
 
 export const adminApi = new AdminApi()
 export default adminApi
-export type { Company, KnowledgeDocument, DocumentChunk, FeedbackStats, FeedbackResponse, CompanyCreate }
+export type { Company, KnowledgeDocument, DocumentChunk, FeedbackStats, FeedbackResponse, CompanyCreate, DocumentProcessRequest, DocumentProcessingStatus, CompanyMetrics, DashboardMetrics, SystemSummary }

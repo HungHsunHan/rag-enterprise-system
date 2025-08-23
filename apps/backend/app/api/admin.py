@@ -10,10 +10,13 @@ from app.schemas.document import KnowledgeDocument, DocumentProcessRequest
 from app.schemas.chat import FeedbackResponse, FeedbackStats
 from app.schemas.user import User, UserCreate, UserUpdate
 from app.schemas.model import LLMModel, LLMModelCreate, LLMModelUpdate
-from app.services.company_service import create_company, get_companies
+from app.schemas.dashboard import DashboardMetrics, SystemSummary
+from app.services.company_service import create_company, get_companies, delete_company
+from app.services.dashboard_service import get_dashboard_metrics, get_system_summary
 from app.services.document_service import (
     upload_document, get_documents, delete_document, delete_documents_bulk,
-    get_document_versions, get_documents_with_tags, update_document_tags, get_all_tags
+    get_document_versions, get_documents_with_tags, update_document_tags, get_all_tags,
+    get_document_chunks
 )
 from app.services.user_service import (
     create_user, get_users, get_user_by_id, update_user, delete_user, get_users_by_company
@@ -28,6 +31,30 @@ from app.services.error_logging_service import get_error_logs, get_error_statist
 from app.services.test_coverage_service import generate_coverage_report, get_coverage_summary, run_tests_with_coverage
 
 router = APIRouter()
+
+
+@router.get("/dashboard/metrics", response_model=DashboardMetrics)
+def get_dashboard_overview_metrics(
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """
+    Get dashboard overview metrics including system overview cards
+    """
+    metrics = get_dashboard_metrics(db)
+    return metrics
+
+
+@router.get("/dashboard/summary", response_model=SystemSummary)
+def get_system_overview_summary(
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """
+    Get high-level system summary metrics
+    """
+    summary = get_system_summary(db)
+    return summary
 
 
 @router.get("/companies", response_model=List[Company])
@@ -53,6 +80,30 @@ def create_new_company(
     """
     company = create_company(db, company_data)
     return company
+
+
+@router.delete("/companies/{company_id}")
+def delete_company_endpoint(
+    company_id: str,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """
+    Delete a company (admin only)
+    """
+    try:
+        success = delete_company(db, company_id)
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Company not found"
+            )
+        return {"message": "Company deleted successfully"}
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
 
 
 # User Management Endpoints
@@ -459,7 +510,7 @@ def bulk_delete_documents(
     }
 
 
-@router.get("/feedback", response_model=List[FeedbackResponse])
+@router.get("/feedback")
 def get_company_feedback(
     company_id: str,
     feedback_type: str = None,
@@ -488,7 +539,7 @@ def get_company_feedback_stats(
     return FeedbackStats(**stats)
 
 
-@router.get("/feedback/search", response_model=List[FeedbackResponse])
+@router.get("/feedback/search")
 def search_company_feedback(
     company_id: str,
     search_term: str,
@@ -594,8 +645,6 @@ def get_knowledge_chunks(
     """
     Get knowledge chunks for a specific company
     """
-    from app.services.document_service import get_document_chunks
-    
     chunks = get_document_chunks(db, company_id, limit, offset)
     return {
         "chunks": [

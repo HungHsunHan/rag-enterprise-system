@@ -1,6 +1,6 @@
-# HR Internal Q&A System 🤖
+# Enterprise RAG System 🤖
 
-A comprehensive RAG-powered (Retrieval-Augmented Generation) HR chatbot system built for enterprise use with multi-tenant data isolation, intelligent document processing, and natural language query capabilities.
+A comprehensive multi-tenant RAG-powered (Retrieval-Augmented Generation) enterprise system built for intelligent document management, natural language query capabilities, and company-scoped knowledge base interactions.
 
 [![Built with React](https://img.shields.io/badge/Frontend-React%2018-61DAFB?logo=react)](https://reactjs.org/)
 [![Built with FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
@@ -60,7 +60,7 @@ The fastest way to get started:
 
 ```bash
 # Clone and setup the entire project
-git clone <your-repository-url>
+git clone https://github.com/yourusername/rag-enterprise-system.git
 cd rag-enterprise-system
 
 # Run the automated setup script (handles everything!)
@@ -504,6 +504,7 @@ We welcome contributions! Here's how to get started:
 
 1. **Fork the Repository**
    ```bash
+   git fork https://github.com/yourusername/rag-enterprise-system.git
    git clone https://github.com/your-username/rag-enterprise-system.git
    cd rag-enterprise-system
    ```

@@ -14,9 +14,11 @@ import {
   DialogActions,
   TextField,
   Alert,
-  CircularProgress
+  CircularProgress,
+  IconButton,
+  DialogContentText
 } from '@mui/material'
-import { AddRounded, BusinessRounded } from '@mui/icons-material'
+import { AddRounded, BusinessRounded, DeleteRounded } from '@mui/icons-material'
 import { adminApi } from '../../api/admin'
 import type { Company } from '../../api/admin'
 
@@ -27,6 +29,9 @@ const CompaniesPage: React.FC = () => {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [newCompanyName, setNewCompanyName] = useState('')
   const [creating, setCreating] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [companyToDelete, setCompanyToDelete] = useState<Company | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     fetchCompanies()
@@ -65,6 +70,35 @@ const CompaniesPage: React.FC = () => {
     setDialogOpen(false)
     setNewCompanyName('')
     setError('')
+  }
+
+  const handleDeleteClick = (company: Company) => {
+    setCompanyToDelete(company)
+    setDeleteDialogOpen(true)
+  }
+
+  const handleDeleteDialogClose = () => {
+    setDeleteDialogOpen(false)
+    setCompanyToDelete(null)
+    setError('')
+  }
+
+  const handleDeleteCompany = async () => {
+    if (!companyToDelete) return
+
+    setDeleting(true)
+    setError('')
+
+    try {
+      await adminApi.deleteCompany(companyToDelete.id)
+      setCompanies(prev => prev.filter(c => c.id !== companyToDelete.id))
+      setDeleteDialogOpen(false)
+      setCompanyToDelete(null)
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to delete company')
+    } finally {
+      setDeleting(false)
+    }
   }
 
   if (loading) {
@@ -122,6 +156,16 @@ const CompaniesPage: React.FC = () => {
                   key={company.id}
                   divider={index < companies.length - 1}
                   sx={{ pl: 0 }}
+                  secondaryAction={
+                    <IconButton 
+                      edge="end" 
+                      aria-label="delete"
+                      onClick={() => handleDeleteClick(company)}
+                      color="error"
+                    >
+                      <DeleteRounded />
+                    </IconButton>
+                  }
                 >
                   <ListItemText
                     primary={company.name}
@@ -164,6 +208,37 @@ const CompaniesPage: React.FC = () => {
             disabled={!newCompanyName.trim() || creating}
           >
             {creating ? <CircularProgress size={20} /> : 'Create'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={handleDeleteDialogClose}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Delete Company</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete "{companyToDelete?.name}"?
+          </DialogContentText>
+          <DialogContentText sx={{ mt: 1, color: 'warning.main' }}>
+            This action cannot be undone. The company must not have any users or documents.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleDeleteDialogClose} disabled={deleting}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleDeleteCompany}
+            variant="contained"
+            color="error"
+            disabled={deleting}
+          >
+            {deleting ? <CircularProgress size={20} /> : 'Delete'}
           </Button>
         </DialogActions>
       </Dialog>
