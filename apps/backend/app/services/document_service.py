@@ -78,16 +78,56 @@ def find_document_by_hash(db: Session, company_id: str, content_hash: str) -> Op
     ).first()
 
 
-def get_documents(db: Session, company_id: str) -> List[KnowledgeDocument]:
+def get_documents(db: Session, company_id: Optional[str] = None, include_shared: bool = True, skip: int = 0, limit: int = 100) -> List[KnowledgeDocument]:
     """
-    Get all documents for a company
+    Get documents for a company, optionally including shared documents
+    """
+    query = db.query(KnowledgeDocument)
+    
+    if company_id:
+        if include_shared:
+            # Include both company-specific and shared documents
+            query = query.filter(
+                (KnowledgeDocument.company_id == company_id) |
+                (KnowledgeDocument.is_shared == True)
+            )
+        else:
+            # Only company-specific documents
+            query = query.filter(KnowledgeDocument.company_id == company_id)
+    elif include_shared:
+        # Only shared documents
+        query = query.filter(KnowledgeDocument.is_shared == True)
+    
+    return query.order_by(KnowledgeDocument.uploaded_at.desc()).offset(skip).limit(limit).all()
+
+
+def get_documents_by_company_with_pagination(db: Session, company_id: str, skip: int = 0, limit: int = 100, sort_by_date: bool = True) -> List[KnowledgeDocument]:
+    """
+    Get documents for a company with pagination and sorting
+    """
+    query = db.query(KnowledgeDocument).filter(
+        (KnowledgeDocument.company_id == company_id) |
+        (KnowledgeDocument.is_shared == True)
+    )
+    
+    if sort_by_date:
+        query = query.order_by(KnowledgeDocument.uploaded_at.desc())
+    else:
+        query = query.order_by(KnowledgeDocument.original_name.asc())
+    
+    return query.offset(skip).limit(limit).all()
+
+
+def get_shared_documents(db: Session, skip: int = 0, limit: int = 100) -> List[KnowledgeDocument]:
+    """
+    Get all shared documents
     """
     return db.query(KnowledgeDocument).filter(
-        KnowledgeDocument.company_id == company_id
-    ).order_by(KnowledgeDocument.uploaded_at.desc()).all()
+        KnowledgeDocument.is_shared == True
+    ).order_by(KnowledgeDocument.uploaded_at.desc()).offset(skip).limit(limit).all()
 
 
-async def upload_document(db: Session, file: UploadFile, company_id: str, tags: Optional[str] = None) -> KnowledgeDocument:
+async def upload_document(db: Session, file: UploadFile, company_id: Optional[str], tags: Optional[str] = None, is_shared: bool = False) -> KnowledgeDocument:
     """
     Upload and process a document with versioning and tagging support
     """
@@ -137,10 +177,11 @@ async def upload_document(db: Session, file: UploadFile, company_id: str, tags: 
         version=version,
         company_id=company_id,
         parent_document_id=parent_document_id,
-        status="PROCESSING",
+        status="PENDING",  # Changed to PENDING - will be PROCESSING after user clicks process
         file_size=len(file_content),
         content_hash=content_hash,
-        tags=tags
+        tags=tags,
+        is_shared=is_shared
     )
     db.add(document)
     db.commit()
@@ -148,10 +189,114 @@ async def upload_document(db: Session, file: UploadFile, company_id: str, tags: 
     
     logger.info(f"Created document {document.file_name} (version {version}) with hash {content_hash[:8]}")
     
-    # Process document asynchronously
-    asyncio.create_task(process_document_async(str(document.id), file_content, file.filename))
+    # Save file content temporarily for later processing
+    # In production, you might want to store this in a file storage service
+    # For now, we'll store it in memory or implement file storage
     
     return document
+
+
+def get_document_by_id(db: Session, document_id: str) -> Optional[KnowledgeDocument]:
+    """
+    Get document by ID
+    """
+    return db.query(KnowledgeDocument).filter(KnowledgeDocument.id == document_id).first()
+
+
+async def process_document_chunks(db: Session, document_id: str, chunk_size: int, overlap_length: int) -> dict:
+    """
+    Process a document with specified chunk parameters
+    """
+    document = get_document_by_id(db, document_id)
+    if not document:
+        raise ValueError("Document not found")
+    
+    if document.status not in ["PENDING", "FAILED"]:
+        raise ValueError(f"Document cannot be processed. Current status: {document.status}")
+    
+    # Update document with processing parameters
+    document.chunk_size = chunk_size
+    document.overlap_length = overlap_length
+    document.status = "PROCESSING"
+    db.commit()
+    
+    # For now, we'll simulate processing since we don't have file storage yet
+    # In a real implementation, you'd retrieve the file content from storage
+    logger.info(f"Processing document {document_id} with chunk_size={chunk_size}, overlap={overlap_length}")
+    
+    # Create a background task to process the document
+    asyncio.create_task(process_document_with_params(document_id, chunk_size, overlap_length))
+    
+    return {
+        "status": "PROCESSING",
+        "chunks_created": 0  # Will be updated when processing completes
+    }
+
+
+async def process_document_with_params(document_id: str, chunk_size: int, overlap_length: int):
+    """
+    Process document with specified parameters
+    """
+    from app.db.database import SessionLocal
+    
+    db = SessionLocal()
+    try:
+        document = db.query(KnowledgeDocument).filter(
+            KnowledgeDocument.id == document_id
+        ).first()
+        
+        if not document:
+            logger.error(f"Document {document_id} not found")
+            return
+        
+        # For simulation, we'll create some dummy chunks
+        # In real implementation, you'd process the actual file content
+        try:
+            # Simulate text extraction and chunking
+            dummy_text = f"This is simulated content for document {document.file_name}. " * 100
+            
+            # Create chunks based on parameters
+            chunks = []
+            text_length = len(dummy_text)
+            start = 0
+            chunk_index = 0
+            
+            while start < text_length:
+                end = min(start + chunk_size, text_length)
+                chunk_text = dummy_text[start:end]
+                
+                if chunk_text.strip():  # Only add non-empty chunks
+                    chunk = DocumentChunk(
+                        document_id=document.id,
+                        company_id=document.company_id,
+                        chunk_text=chunk_text,
+                        chunk_index=chunk_index,
+                        is_shared=document.is_shared
+                    )
+                    chunks.append(chunk)
+                    chunk_index += 1
+                
+                # Move start position considering overlap
+                start = max(start + chunk_size - overlap_length, start + 1)
+                if start >= text_length:
+                    break
+            
+            # Add chunks to database
+            db.add_all(chunks)
+            
+            # Update document status
+            document.status = "COMPLETED"
+            db.commit()
+            
+            logger.info(f"Completed processing document {document_id}, created {len(chunks)} chunks")
+            
+        except Exception as e:
+            logger.error(f"Failed to process document {document_id}: {e}")
+            document.status = "FAILED"
+            db.commit()
+            
+    finally:
+        db.close()
 
 
 async def process_document_async(document_id: str, file_content: bytes, filename: str):

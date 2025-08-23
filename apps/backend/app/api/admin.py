@@ -6,12 +6,21 @@ from app.core.deps import get_current_admin
 from app.db.database import get_db
 from app.db.models import Admin
 from app.schemas.company import Company, CompanyCreate
-from app.schemas.document import KnowledgeDocument
+from app.schemas.document import KnowledgeDocument, DocumentProcessRequest
 from app.schemas.chat import FeedbackResponse, FeedbackStats
+from app.schemas.user import User, UserCreate, UserUpdate
+from app.schemas.model import LLMModel, LLMModelCreate, LLMModelUpdate
 from app.services.company_service import create_company, get_companies
 from app.services.document_service import (
     upload_document, get_documents, delete_document, delete_documents_bulk,
     get_document_versions, get_documents_with_tags, update_document_tags, get_all_tags
+)
+from app.services.user_service import (
+    create_user, get_users, get_user_by_id, update_user, delete_user, get_users_by_company
+)
+from app.services.model_service import (
+    create_model, get_models, get_model_by_id, update_model, delete_model, 
+    set_default_model, get_default_model
 )
 from app.services.feedback_service import get_feedback_list, get_feedback_stats, search_feedback
 from app.services.monitoring_service import get_system_health, get_usage_statistics
@@ -46,6 +55,244 @@ def create_new_company(
     return company
 
 
+# User Management Endpoints
+@router.get("/users", response_model=List[User])
+def get_user_list(
+    company_id: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """
+    Get all users, optionally filtered by company
+    """
+    users = get_users(db, company_id, skip, limit)
+    return users
+
+
+@router.get("/users/company/{company_id}", response_model=List[User])
+def get_company_users(
+    company_id: str,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """
+    Get all users in a specific company
+    """
+    users = get_users_by_company(db, company_id)
+    return users
+
+
+@router.post("/users", response_model=User)
+def create_new_user(
+    user_data: UserCreate,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """
+    Create a new user
+    """
+    try:
+        user = create_user(db, user_data)
+        return user
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.get("/users/{user_id}", response_model=User)
+def get_user_details(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """
+    Get user details by ID
+    """
+    user = get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    return user
+
+
+@router.put("/users/{user_id}", response_model=User)
+def update_user_details(
+    user_id: str,
+    user_data: UserUpdate,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """
+    Update user information
+    """
+    try:
+        user = update_user(db, user_id, user_data)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        return user
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.delete("/users/{user_id}")
+def delete_user_endpoint(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """
+    Delete a user
+    """
+    success = delete_user(db, user_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    return {"message": "User deleted successfully"}
+
+
+# Model Management Endpoints
+@router.get("/models", response_model=List[LLMModel])
+def get_model_list(
+    active_only: bool = False,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """
+    Get all LLM models
+    """
+    models = get_models(db, active_only)
+    return models
+
+
+@router.post("/models", response_model=LLMModel)
+def create_new_model(
+    model_data: LLMModelCreate,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """
+    Create a new LLM model
+    """
+    try:
+        model = create_model(db, model_data)
+        return model
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.get("/models/{model_id}", response_model=LLMModel)
+def get_model_details(
+    model_id: str,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """
+    Get model details by ID
+    """
+    model = get_model_by_id(db, model_id)
+    if not model:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Model not found"
+        )
+    return model
+
+
+@router.put("/models/{model_id}", response_model=LLMModel)
+def update_model_details(
+    model_id: str,
+    model_data: LLMModelUpdate,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """
+    Update model information
+    """
+    model = update_model(db, model_id, model_data)
+    if not model:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Model not found"
+        )
+    return model
+
+
+@router.delete("/models/{model_id}")
+def delete_model_endpoint(
+    model_id: str,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """
+    Delete a model
+    """
+    try:
+        success = delete_model(db, model_id)
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Model not found"
+            )
+        return {"message": "Model deleted successfully"}
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.post("/models/{model_id}/set-default", response_model=LLMModel)
+def set_model_as_default(
+    model_id: str,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """
+    Set a model as the default
+    """
+    model = set_default_model(db, model_id)
+    if not model:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Model not found"
+        )
+    return model
+
+
+@router.get("/models/default/current", response_model=LLMModel)
+def get_current_default_model(
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """
+    Get the current default model
+    """
+    model = get_default_model(db)
+    if not model:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No default model set"
+        )
+    return model
+
+
 @router.get("/knowledge/documents", response_model=List[KnowledgeDocument])
 def get_knowledge_documents(
     company_id: str,
@@ -64,18 +311,95 @@ async def upload_knowledge_document(
     company_id: str,
     file: UploadFile = File(...),
     tags: str = "",
+    is_shared: bool = False,
     db: Session = Depends(get_db),
     current_admin: Admin = Depends(get_current_admin)
 ):
     """
-    Upload a new knowledge document with optional tags
+    Upload a new knowledge document with optional tags and shared status
     """
-    result = await upload_document(db, file, company_id, tags if tags.strip() else None)
+    # If document is shared, company_id should be None
+    actual_company_id = None if is_shared else company_id
+    
+    result = await upload_document(
+        db, file, actual_company_id, 
+        tags if tags.strip() else None,
+        is_shared=is_shared
+    )
     return {
         "message": "Document uploaded successfully",
         "document_id": result.id,
         "version": result.version,
-        "original_name": result.original_name
+        "original_name": result.original_name,
+        "is_shared": result.is_shared,
+        "status": result.status
+    }
+
+
+@router.post("/knowledge/documents/{document_id}/process")
+async def process_document(
+    document_id: str,
+    process_params: DocumentProcessRequest,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """
+    Process a document with specified chunk size and overlap
+    """
+    from app.services.document_service import process_document_chunks
+    
+    try:
+        result = await process_document_chunks(
+            db, document_id, 
+            process_params.chunk_size, 
+            process_params.overlap_length
+        )
+        return {
+            "message": "Document processing started",
+            "document_id": document_id,
+            "status": "PROCESSING",
+            "chunk_size": process_params.chunk_size,
+            "overlap_length": process_params.overlap_length,
+            "chunks_created": result.get("chunks_created", 0)
+        }
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.get("/knowledge/documents/{document_id}/status")
+def get_document_processing_status(
+    document_id: str,
+    db: Session = Depends(get_db),
+    current_admin: Admin = Depends(get_current_admin)
+):
+    """
+    Get document processing status
+    """
+    from app.services.document_service import get_document_by_id
+    
+    document = get_document_by_id(db, document_id)
+    if not document:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found"
+        )
+    
+    # Count chunks if processing is complete
+    chunks_count = 0
+    if document.status == "COMPLETED":
+        chunks_count = len(document.document_chunks)
+    
+    return {
+        "document_id": document_id,
+        "status": document.status,
+        "chunk_size": document.chunk_size,
+        "overlap_length": document.overlap_length,
+        "chunks_count": chunks_count,
+        "uploaded_at": document.uploaded_at.isoformat(),
+        "is_shared": document.is_shared
     }
 
 

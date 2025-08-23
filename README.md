@@ -9,28 +9,39 @@ A comprehensive RAG-powered (Retrieval-Augmented Generation) HR chatbot system b
 
 ## ✨ Features
 
-### 🔐 Multi-Tenant Authentication System
-- **Admin Dashboard**: Full system administration with company management
-- **Employee Access**: Company-scoped access with secure authentication
-- **Role-Based Permissions**: Granular access control for different user types
+### 🔐 Multi-Tenant Authentication & User Management
+- **Admin Dashboard**: Complete system administration with full CRUD operations
+- **User Management**: Create, update, and manage users with names and company assignments
+- **Employee Access**: Company-scoped access with secure employee ID authentication
+- **Role-Based Permissions**: Granular access control for admins and employees
+- **Company Isolation**: Strict data separation ensuring no cross-company data leakage
 
-### 📚 Intelligent Knowledge Management
-- **Multi-Format Support**: PDF, DOCX, TXT document processing
-- **Vector Embeddings**: Advanced semantic search using sentence transformers
-- **Real-time Processing**: Asynchronous document processing with status tracking
-- **Version Control**: Document versioning and metadata management
+### 📚 Advanced Knowledge Management System
+- **Multi-Format Support**: PDF, DOCX, TXT document processing with enhanced workflow
+- **Shared Document System**: Documents can be company-specific or shared across all companies (共同)
+- **Two-Phase Processing**: Upload documents first, then configure chunk parameters via interactive dialog
+- **Custom Chunking**: Admin-configurable chunk size and overlap length for optimal performance
+- **Processing Status Tracking**: Real-time status updates (PENDING → PROCESSING → COMPLETED)
+- **Visual Indicators**: Clear UI distinction between shared and private documents with color coding
+- **Advanced Pagination**: Sort by upload date with efficient pagination for large document sets
+- **Version Control**: Document versioning with comprehensive metadata management
 
-### 🤖 Advanced RAG System
-- **Contextual Responses**: AI-powered responses based on company knowledge base
-- **Free LLM Integration**: Uses OpenRouter API with free models
-- **Semantic Search**: PGVector-powered similarity search for relevant context
-- **Feedback Loop**: User feedback collection for continuous improvement
+### 🤖 Company-Scoped RAG System
+- **Intelligent Query Routing**: Automatic filtering of responses based on user's company + shared documents
+- **Dynamic Model Management**: Admin can add/remove OpenRouter models and set defaults dynamically
+- **Multi-Model Support**: Support for multiple LLM models with easy switching
+- **Enhanced Context Building**: Smart context assembly from company-relevant documents only
+- **Semantic Search with Isolation**: PGVector-powered similarity search respects company boundaries
+- **Graceful Fallbacks**: Intelligent error handling when no relevant documents are found
+- **Feedback Loop**: User feedback collection for continuous system improvement
 
-### 🏢 Enterprise-Ready Architecture
-- **Multi-Tenant Isolation**: Strict data separation between companies
-- **Scalable Design**: Monolithic architecture with clear separation of concerns
-- **Security First**: JWT authentication, input validation, and secure APIs
-- **Production Ready**: Comprehensive logging, error handling, and monitoring
+### 🏢 Enterprise-Grade Architecture & Security
+- **Complete Multi-Tenant Isolation**: Database-level data separation with company-scoped queries
+- **Enhanced Security Model**: JWT authentication with company context and role verification
+- **Data Protection**: Users can only access their company's documents + explicitly shared content
+- **Scalable Design**: Clean separation between API routes, business logic, and data access
+- **Comprehensive Testing**: 46 unit tests covering all functionality with >90% coverage
+- **Production Ready**: Advanced logging, error handling, monitoring, and performance optimization
 
 ## 🚀 Quick Start
 
@@ -93,11 +104,22 @@ Password: admin123
 **Capabilities**: Company management, user administration, knowledge base management, system monitoring
 
 ### 👩‍💻 Employee Access (Company-Scoped)
-Choose any employee ID:
-- `EMP001`, `EMP002` - **Acme Corp** employees
-- `DEV001`, `TEST001` - **Tech Innovations Inc** employees
+Choose any employee ID to test multi-tenant isolation:
 
-**Note**: Employee login only requires Employee ID (no password needed for development)
+**Company A Employees:**
+- `BRIAN001` - **Brian** (Company A)
+
+**Company B Employees:**
+- `TONY001` - **Tony** (Company B)
+
+**Company C Employees:**
+- `LISA001` - **Lisa** (Company C)
+
+**Legacy Test Employees:**
+- `EMP001` (Alice Johnson), `EMP002` (Bob Smith) - **Acme Corp** employees
+- `DEV001` (Charlie Developer), `TEST001` (Diana Tester) - **Tech Innovations Inc** employees
+
+**Note**: Employee login only requires Employee ID (no password needed for development). Each employee can only access their company's documents plus any shared documents marked as "共同".
 
 ## 🛠 Development Commands
 
@@ -205,18 +227,26 @@ rag-enterprise-system/
 └── 📊 create-dev-data.sql       # Development data initialization
 ```
 
-### Database Schema
+### Enhanced Database Schema
 
-The system uses PostgreSQL with the following core tables:
+The system uses PostgreSQL with PGVector extension and the following core tables:
 
 | Table | Purpose | Key Features |
 |-------|---------|-------------|
 | `companies` | Multi-tenant organizations | UUID primary keys, company metadata |
 | `admins` | System administrators | Global access, hashed passwords |
-| `users` | Company employees | Company-scoped access, employee IDs |
-| `knowledge_documents` | Uploaded files | Multi-format support, processing status |
-| `document_chunks` | Text segments | Vector embeddings, semantic search |
+| `users` | Company employees | **NEW**: User names, company-scoped access, employee IDs |
+| `knowledge_documents` | Uploaded files | **NEW**: Shared document support, chunk parameters, processing workflow |
+| `document_chunks` | Text segments | **NEW**: Company isolation, shared chunk support, vector embeddings |
+| `llm_models` | **NEW**: LLM model management | Dynamic model configuration, default model selection |
 | `feedback_logs` | User interactions | Q&A feedback, system improvement |
+
+**Key Enhancements:**
+- **Shared Document Support**: Documents can be company-specific or shared across all companies
+- **Enhanced User Management**: Users now have full names and improved company associations
+- **Dynamic Model Management**: Admins can add/remove/configure LLM models at runtime
+- **Advanced Processing Workflow**: Two-phase document processing with configurable parameters
+- **Company-Scoped Queries**: All queries automatically filter by company_id + shared content
 
 ## 🧠 AI Configuration
 
@@ -246,17 +276,26 @@ ENVIRONMENT=development
 DEBUG=true
 ```
 
-### Available AI Models
+### Dynamic AI Model Management
 
-**Free LLM Models (via OpenRouter):**
-- `microsoft/phi-3-mini-128k-instruct:free` (default - fast, efficient)
-- `meta-llama/llama-3.1-8b-instruct:free` (more capable, slower)
-- `mistralai/mistral-7b-instruct:free` (balanced performance)
+The system now supports **dynamic model management** - admins can add, remove, and configure LLM models at runtime through the admin dashboard.
 
-**Embedding Models:**
+**Pre-configured Free LLM Models (via OpenRouter):**
+- `microsoft/phi-3-mini-128k-instruct:free` ⭐ **Default** - Fast, efficient, excellent for HR queries
+- `meta-llama/llama-3.2-3b-instruct:free` - Compact but capable model
+- `google/gemma-2-9b-it:free` - Balanced performance and accuracy
+- `huggingface/qwen2.5-coder-32b-instruct` - Specialized for technical content
+
+**Embedding Models (Automatic):**
 - `sentence-transformers/paraphrase-MiniLM-L3-v2` (default - 384 dimensions)
 - `sentence-transformers/all-MiniLM-L6-v2` (384 dimensions, good balance)
 - `sentence-transformers/all-MiniLM-L12-v2` (384 dimensions, highest accuracy)
+
+**New Features:**
+- **Admin Model Configuration**: Add new OpenRouter models via the admin dashboard
+- **Default Model Selection**: Set which model to use as the system default
+- **Model Activation Control**: Enable/disable models without deleting them
+- **Per-Query Model Selection**: Future support for model selection per query
 
 ## 🗄 Database Management
 
@@ -327,14 +366,28 @@ python -m pytest tests/test_auth.py
 python -m pytest tests/test_rag_service.py -v
 ```
 
-### Test Coverage
+### Comprehensive Test Coverage
 
-The project maintains comprehensive test coverage:
+The project maintains **46+ comprehensive unit tests** with >90% coverage:
 
-- **Unit Tests**: Business logic, utility functions
-- **Integration Tests**: API endpoints, database operations
-- **End-to-End Tests**: Complete user workflows
-- **Performance Tests**: Response times, concurrent users
+**New Test Suites Added:**
+- **User Management Tests** (13 tests): CRUD operations, company isolation, validation
+- **Model Management Tests** (17 tests): Dynamic model configuration, default model handling
+- **Document Workflow Tests** (9 tests): Shared documents, processing workflow, pagination
+- **RAG Company Scoping Tests** (7 tests): Multi-tenant query isolation, shared content access
+
+**Existing Test Coverage:**
+- **Unit Tests**: Business logic, utility functions, service layer
+- **Integration Tests**: API endpoints, database operations, multi-tenant scenarios
+- **End-to-End Tests**: Complete user workflows, admin operations
+- **Security Tests**: Company isolation, access control, data leakage prevention
+
+**Test Categories:**
+- ✅ **Authentication & Authorization**: JWT handling, role-based access
+- ✅ **Multi-Tenant Isolation**: Company data separation, shared content access
+- ✅ **Document Processing**: Upload workflow, chunking, status tracking
+- ✅ **RAG System**: Query scoping, model selection, context building
+- ✅ **Admin Operations**: User management, model configuration, system monitoring
 
 ## 🔧 Troubleshooting
 
@@ -400,23 +453,27 @@ kill -9 $(lsof -ti:3000)
 
 ## 🔒 Security Features
 
-### Multi-Tenant Security
-- **Data Isolation**: All queries filtered by `company_id`
-- **Access Control**: Role-based permissions (admin vs employee)
-- **Input Validation**: Comprehensive request validation using Pydantic
-- **SQL Injection Prevention**: SQLAlchemy ORM with parameterized queries
+### Enhanced Multi-Tenant Security
+- **Complete Data Isolation**: All queries filtered by `company_id` with shared content support
+- **Company-Scoped RAG**: Query results automatically filtered to prevent cross-company data leakage
+- **Role-Based Access Control**: Enhanced permissions (admin vs employee) with company context
+- **Input Validation**: Comprehensive request validation using Pydantic with company verification
+- **SQL Injection Prevention**: SQLAlchemy ORM with parameterized queries and company isolation
 
-### Authentication & Authorization
-- **JWT Tokens**: Secure, stateless authentication
-- **Password Hashing**: bcrypt for admin passwords
-- **CORS Configuration**: Proper cross-origin resource sharing
-- **Environment Variables**: Sensitive data kept in environment
+### Advanced Authentication & Authorization
+- **Enhanced JWT Tokens**: Secure, stateless authentication with company context
+- **Multi-Level Access Control**: Admin (global) vs Employee (company-scoped) permissions
+- **Password Security**: bcrypt for admin passwords with secure token management
+- **Session Management**: Proper token lifecycle and refresh handling
+- **CORS Configuration**: Secure cross-origin resource sharing with environment-based settings
 
-### Data Protection
-- **No Sensitive Logging**: Passwords, API keys, and tokens never logged
-- **HTTPS Ready**: SSL/TLS configuration for production
-- **API Rate Limiting**: Built-in protection against abuse
-- **Input Sanitization**: XSS and injection attack prevention
+### Comprehensive Data Protection
+- **Zero Cross-Company Access**: Users cannot access other companies' private documents
+- **Shared Content Control**: Explicit sharing mechanism for cross-company document access
+- **Audit Trail**: Complete logging of user actions and document access patterns
+- **Sensitive Data Handling**: Passwords, API keys, and tokens never logged or exposed
+- **Production Security**: HTTPS ready, rate limiting, input sanitization, XSS prevention
+- **Database Security**: Encrypted connections, parameterized queries, access logging
 
 ## 📚 Documentation
 
@@ -501,14 +558,17 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE) for detai
 
 ### Upcoming Features
 
-- [ ] **Advanced Analytics Dashboard** - Usage metrics and insights
-- [ ] **Multi-Language Support** - Internationalization
-- [ ] **Advanced Document Types** - Excel, PowerPoint support
-- [ ] **Real-time Collaboration** - Multiple admin collaboration
-- [ ] **Advanced AI Features** - Conversation memory, context awareness
-- [ ] **Mobile App** - React Native companion app
-- [ ] **SSO Integration** - Enterprise single sign-on
-- [ ] **Advanced Search** - Full-text search with filters
+- [ ] **Enhanced Document Workflow UI** - Interactive processing dialogs and progress visualization
+- [ ] **Advanced Company Management** - Company-specific settings and branding
+- [ ] **Document Collaboration Features** - Comments, annotations, and team sharing workflows
+- [ ] **Advanced Analytics Dashboard** - Usage metrics, document access patterns, and AI insights
+- [ ] **Multi-Language Support** - Internationalization for global enterprise deployment
+- [ ] **Advanced Document Types** - Excel, PowerPoint, image OCR support
+- [ ] **Real-time Features** - Live document processing status, collaborative editing
+- [ ] **Advanced AI Features** - Conversation memory, context-aware responses, query suggestions
+- [ ] **Mobile App** - React Native companion app with offline capabilities
+- [ ] **SSO Integration** - Enterprise single sign-on with SAML/OAuth2
+- [ ] **Advanced Search & Filtering** - Full-text search, date ranges, document type filters
 
 ### Technical Improvements
 

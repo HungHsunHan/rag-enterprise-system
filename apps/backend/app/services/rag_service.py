@@ -30,9 +30,9 @@ class RAGService:
         else:
             logger.info(f"Initialized OpenRouter client with model: {self.model}")
     
-    def generate_answer(self, db: Session, question: str, company_id: str) -> str:
+    def generate_answer(self, db: Session, question: str, company_id: str, model_name: Optional[str] = None) -> str:
         """
-        Generate answer using RAG pipeline
+        Generate answer using RAG pipeline with company-scoped search
         """
         try:
             # Step 1: Convert question to embedding
@@ -40,8 +40,8 @@ class RAGService:
             if query_embedding is None:
                 return self._fallback_response(question)
             
-            # Step 2: Perform vector similarity search
-            relevant_chunks = search_similar_chunks(
+            # Step 2: Perform company-scoped vector similarity search (includes shared documents)
+            relevant_chunks = self._search_company_scoped_chunks(
                 db, 
                 query_embedding.tolist(), 
                 company_id, 
@@ -54,14 +54,52 @@ class RAGService:
             # Step 3: Construct context from relevant chunks
             context = self._build_context(relevant_chunks)
             
-            # Step 4: Generate answer using LLM
-            answer = self._generate_llm_response(question, context)
+            # Step 4: Generate answer using LLM (use specified model or default)
+            actual_model = model_name or self.model
+            answer = self._generate_llm_response(question, context, actual_model)
             
             return answer
             
         except Exception as e:
             logger.error(f"Error in RAG pipeline: {e}")
             return "I'm sorry, I encountered an error while processing your question. Please try again or contact your HR team for assistance."
+    
+    def _search_company_scoped_chunks(self, db: Session, query_embedding: List[float], company_id: str, limit: int = 5) -> List[DocumentChunk]:
+        """
+        Search for relevant chunks scoped to company (including shared documents)
+        """
+        try:
+            # Query chunks that belong to the company OR are shared
+            from sqlalchemy import text
+            
+            # Use raw SQL for vector similarity search with company scoping
+            sql = text("""
+                SELECT * FROM document_chunks 
+                WHERE (company_id = :company_id OR is_shared = true)
+                AND embedding IS NOT NULL
+                ORDER BY embedding <-> :embedding
+                LIMIT :limit
+            """)
+            
+            result = db.execute(sql, {
+                'company_id': company_id,
+                'embedding': str(query_embedding),
+                'limit': limit
+            })
+            
+            chunk_ids = [row[0] for row in result.fetchall()]
+            
+            if chunk_ids:
+                return db.query(DocumentChunk).filter(DocumentChunk.id.in_(chunk_ids)).all()
+            else:
+                return []
+                
+        except Exception as e:
+            logger.error(f"Error in company-scoped chunk search: {e}")
+            # Fallback to simple company filter without vector search
+            return db.query(DocumentChunk).filter(
+                (DocumentChunk.company_id == company_id) | (DocumentChunk.is_shared == True)
+            ).limit(limit).all()
     
     def _vectorize_question(self, question: str) -> Optional[any]:
         """
@@ -83,7 +121,7 @@ class RAGService:
         
         return "\n\n".join(context_parts)
     
-    def _generate_llm_response(self, question: str, context: str) -> str:
+    def _generate_llm_response(self, question: str, context: str, model_name: str = None) -> str:
         """
         Generate response using OpenRouter LLM
         """
@@ -103,7 +141,7 @@ class RAGService:
             }
             
             payload = {
-                "model": self.model,
+                "model": model_name or self.model,
                 "messages": [
                     {
                         "role": "system",

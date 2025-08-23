@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, String, DateTime, ForeignKey, Text, UniqueConstraint, Integer
+from sqlalchemy import Column, String, DateTime, ForeignKey, Text, UniqueConstraint, Integer, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from pgvector.sqlalchemy import Vector
@@ -44,6 +44,7 @@ class User(Base):
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     employee_id = Column(String(100), nullable=False)
+    name = Column(String(255), nullable=False)  # User's full name
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     
@@ -65,13 +66,16 @@ class KnowledgeDocument(Base):
     file_name = Column(String(255), nullable=False)
     original_name = Column(String(255), nullable=False)  # Original filename without version suffix
     version = Column(Integer, nullable=False, default=1)
-    status = Column(String(50), nullable=False, default="PROCESSING")  # PROCESSING, COMPLETED, FAILED
-    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False)
+    status = Column(String(50), nullable=False, default="PENDING")  # PENDING, PROCESSING, COMPLETED, FAILED
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=True)  # NULL for shared documents
     parent_document_id = Column(UUID(as_uuid=True), ForeignKey("knowledge_documents.id"), nullable=True)  # For versioning
     uploaded_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     file_size = Column(Integer, nullable=True)  # File size in bytes
     content_hash = Column(String(64), nullable=True)  # SHA-256 hash for duplicate detection
     tags = Column(String(500), nullable=True)  # Comma-separated tags
+    is_shared = Column(Boolean, nullable=False, default=False)  # True for shared documents
+    chunk_size = Column(Integer, nullable=True)  # Chunk size used for processing
+    overlap_length = Column(Integer, nullable=True)  # Overlap length used for processing
     
     # Relationships
     company = relationship("Company", back_populates="knowledge_documents")
@@ -87,15 +91,30 @@ class DocumentChunk(Base):
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     document_id = Column(UUID(as_uuid=True), ForeignKey("knowledge_documents.id"), nullable=False)
-    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=True)  # NULL for shared documents
     chunk_text = Column(Text, nullable=False)
     chunk_index = Column(Integer, nullable=False, default=0)  # Order within document
     embedding = Column(Vector(384), nullable=True)  # 384-dimensional vector for all-MiniLM-L6-v2
+    is_shared = Column(Boolean, nullable=False, default=False)  # True for shared chunks
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     
     # Relationships
     document = relationship("KnowledgeDocument", back_populates="document_chunks")
     company = relationship("Company", back_populates="document_chunks")
+
+
+class LLMModel(Base):
+    """
+    LLM Model configuration - stores available models for RAG
+    """
+    __tablename__ = "llm_models"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    model_name = Column(String(255), nullable=False, unique=True)  # OpenRouter model name
+    display_name = Column(String(255), nullable=False)  # Human-readable name
+    is_active = Column(Boolean, nullable=False, default=True)
+    is_default = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
 
 class FeedbackLog(Base):

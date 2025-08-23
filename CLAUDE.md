@@ -4,108 +4,162 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Development Commands
 
-### Setup and Installation
+### Project Setup
 ```bash
-# Initial setup - runs database and installs dependencies
+# Start development environment (databases + install deps + init data)
 ./scripts/dev-setup.sh
 
-# Start development servers
-npm run dev                 # Both frontend and backend
-npm run dev:frontend        # Frontend only (port 3000)
-npm run dev:backend         # Backend only (port 8000)
+# Start both frontend and backend
+npm run dev
+
+# Start services individually  
+npm run dev:frontend    # React frontend on port 3000
+npm run dev:backend     # FastAPI backend on port 8000
 ```
 
-### Backend Development
+### Development Workflow
 ```bash
-cd apps/backend
-
+# Building
+npm run build           # Build frontend for production
 
 # Testing
-python -m pytest           # Run all tests
-python -m pytest tests/test_specific.py  # Run specific test
+npm run test            # Run all tests (frontend + backend)
+npm run test:frontend   # Run frontend tests (vitest)
+npm run test:backend    # Run backend tests (pytest)
 
-# Code quality
-black .                     # Format code
-ruff check .               # Lint code
-ruff check . --fix         # Fix linting issues
-mypy .                     # Type checking
+# Code Quality
+npm run lint            # Lint all code
+npm run format          # Format all code
+npm run lint:frontend   # ESLint frontend
+npm run lint:backend    # Ruff backend  
+npm run format:frontend # Prettier frontend
+npm run format:backend  # Black + Ruff backend
 ```
 
-### Frontend Development
+### Backend-Specific Commands (from apps/backend/)
 ```bash
-cd apps/frontend
+# Database migrations
+python -m alembic upgrade head
+python -m alembic revision --autogenerate -m "description"
 
-# Development
-npm run dev                 # Start dev server
-npm run build              # Build for production
-npm run preview            # Preview production build
+# Testing with coverage
+python -m pytest --cov=app --cov-report=html tests/
+python -m pytest tests/test_specific.py     # Run specific test
+python -m pytest -v                         # Verbose output
 
 # Code quality
-npm run lint               # Lint code
-npm run format             # Format code with Prettier
-npm run test               # Run tests
+black .                 # Format code
+ruff check .            # Lint code
+ruff check . --fix      # Auto-fix linting issues
+mypy .                  # Type checking
 ```
 
 ### Database Management
 ```bash
-# Start database services
+# Start/stop database services
 docker-compose up -d postgres redis
+docker-compose down
 
-# Access PostgreSQL directly
+# Check service status
+docker-compose ps
+docker-compose logs postgres
+
+# Database access
 docker-compose exec postgres psql -U postgres -d hr_chatbot
+
+# Reset database (destructive!)
+docker-compose down -v && docker-compose up -d postgres redis
 ```
 
 ## Architecture Overview
 
-This is a **monolithic application** in a **monorepo** structure implementing an **HR internal Q&A system** with RAG (Retrieval-Augmented Generation) capabilities.
+### Technology Stack
+**Frontend**: React 18 + TypeScript + Vite + Material-UI + Zustand + React Router
+**Backend**: FastAPI + SQLAlchemy + Alembic + Pydantic + JWT authentication  
+**Database**: PostgreSQL with PGVector extension + Redis for caching
+**AI/ML**: OpenRouter API + Sentence Transformers + PGVector similarity search
 
-### Core Architecture Principles
+### Monorepo Structure
+```
+apps/
+├── frontend/           # React TypeScript application
+│   ├── src/api/       # Backend API clients (auth, admin, user)
+│   ├── src/components/# Reusable UI components  
+│   ├── src/pages/     # Page components (Login, Chat, Admin)
+│   ├── src/store/     # Zustand state management
+│   └── src/styles/    # MUI theme configuration
+└── backend/           # FastAPI Python application
+    ├── app/api/       # API route handlers (auth, chat, admin)
+    ├── app/core/      # Configuration and security
+    ├── app/db/        # SQLAlchemy models and database
+    ├── app/schemas/   # Pydantic validation models
+    ├── app/services/  # Business logic layer
+    ├── alembic/       # Database migrations
+    └── tests/         # Backend tests
+```
 
-1. **Multi-tenant Data Isolation**: CRITICAL SECURITY REQUIREMENT
-   - ALL database queries MUST include `WHERE company_id = :company_id` filtering
-   - No exceptions - this prevents cross-tenant data leakage
+### Multi-Tenant Architecture
+- **Data Isolation**: All queries filtered by `company_id`
+- **Admin Access**: Full system administration (companies, users, documents)
+- **Employee Access**: Company-scoped access with employee ID authentication
+- **Security**: JWT tokens, bcrypt hashing, input validation, SQL injection prevention
 
-2. **Repository Pattern**: All database access goes through repository classes in `app/db/`
-   - Never use SQLAlchemy session directly in API routes or services
-   - Use dependency injection for database access
+### Key Services
+- **RAG Service** (`app/services/rag_service.py`): Core Q&A engine with vector similarity search
+- **Document Service** (`app/services/document_service.py`): File upload, processing, and vectorization
+- **Auth Service** (`app/services/auth_service.py`): JWT authentication for admins and employees
+- **Company Service** (`app/services/company_service.py`): Multi-tenant company management
 
-3. **Configuration Management**: All settings accessed through `app/core/config.py`
-   - Never use `os.environ.get()` directly in code
-   - All environment variables defined in Settings class
+## Development Guidelines
 
-### Key Components
+### Database Schema
+Core tables: `companies`, `admins`, `users`, `knowledge_documents`, `document_chunks`, `feedback_logs`
+- Uses UUID primary keys for companies
+- PGVector extension for document embeddings (384 dimensions)
+- Multi-tenant isolation via company_id foreign keys
 
-#### Backend (`apps/backend/`)
-- **FastAPI** application with automatic OpenAPI documentation
-- **SQLAlchemy** ORM with **PostgreSQL + PGVector** for vector storage
-- **JWT authentication** for both admins and employees
-- **RAG pipeline** using sentence-transformers and LLM APIs
-- **Multi-format document processing** (.pdf, .docx, .txt)
+### Authentication Flow
+- **Admin Login**: Email + password → JWT token with admin privileges
+- **Employee Login**: Employee ID only → JWT token scoped to company
+- **JWT Tokens**: Include user_id, company_id, is_admin claims
+- **Protected Routes**: All API endpoints except auth require valid JWT
 
-#### Frontend (`apps/frontend/`)
-- **React + TypeScript** with **Vite** build system
-- **MUI (Material-UI)** component library for UI
-- **Zustand** for state management
-- **React Router** for navigation
+### Frontend State Management
+- **Zustand Store** (`src/store/authStore.ts`): Centralized auth state with persistence
+- **API Clients**: Axios-based with automatic JWT token injection
+- **Error Handling**: Automatic token refresh and logout on 401 responses
 
-#### Database Schema
-- `companies` - Multi-tenant organizations
-- `admins` - System administrators (global access)
-- `users` - Employees (company-scoped access)
-- `knowledge_documents` - Uploaded files
-- `document_chunks` - Text segments with vector embeddings
-- `feedback_logs` - User feedback on Q&A pairs
+### Testing Strategy
+- **Backend**: Pytest with fixtures for database isolation between tests
+- **Frontend**: Vitest for unit tests, Playwright for e2e tests
+- **Coverage**: Maintain >80% test coverage for business logic
+- **Integration**: Test multi-tenant data isolation and auth flows
+
+### File Processing Pipeline
+1. Upload via multipart form to `/api/documents/upload`
+2. Extract text from PDF/DOCX/TXT using pypdf/python-docx
+3. Split text into chunks with overlapping windows
+4. Generate embeddings using sentence-transformers
+5. Store vectors in PGVector with company isolation
+6. Enable semantic search via cosine similarity
+
+### RAG Q&A Flow
+1. Employee question → vector embedding
+2. Similarity search in company-scoped document_chunks
+3. Retrieve top K relevant chunks as context
+4. Construct prompt with context + question
+5. Send to OpenRouter LLM API (free models available)
+6. Return generated answer to frontend
 
 ## Environment Configuration
 
-### Required Environment Variables
-
+### Required Environment Variables (.env)
 ```bash
-# LLM API Configuration (OpenRouter)
-OPENROUTER_API_KEY=your-openrouter-api-key-here
+# LLM Configuration (OpenRouter)
+OPENROUTER_API_KEY=your-openrouter-api-key
 LLM_MODEL=microsoft/phi-3-mini-128k-instruct:free
 
-# Embedding Configuration (Free Models)
+# Embedding Configuration  
 EMBEDDING_MODEL=sentence-transformers/paraphrase-MiniLM-L3-v2
 EMBEDDING_DIMENSION=384
 
@@ -113,98 +167,73 @@ EMBEDDING_DIMENSION=384
 DATABASE_URL=postgresql://postgres:password@localhost:5432/hr_chatbot
 
 # Security
-SECRET_KEY=your-secret-key-change-this-in-production
+SECRET_KEY=your-secret-key-change-in-production
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
 ```
 
-### Alternative Free LLM Models (via OpenRouter)
-- `microsoft/phi-3-mini-128k-instruct:free` (default)
-- `meta-llama/llama-3.1-8b-instruct:free`
-- `mistralai/mistral-7b-instruct:free`
+### Development Access Points
+- **Frontend**: http://localhost:3000
+- **Backend API**: http://localhost:8000
+- **API Docs**: http://localhost:8000/docs
+- **Admin Dashboard**: http://localhost:3000/admin
 
-### Alternative Free Embedding Models
-- `sentence-transformers/paraphrase-MiniLM-L3-v2` (default, 384 dimensions)
-- `sentence-transformers/all-MiniLM-L6-v2` (384 dimensions)
-- `sentence-transformers/all-MiniLM-L12-v2` (384 dimensions, more accurate but slower)
+### Development Credentials
+**Admin**: `admin@dev.com` / `admin123`
+**Employees**: Use employee IDs like `EMP001`, `EMP002`, `DEV001`, `TEST001`
 
-## Critical Security Rules
+## Common Issues and Solutions
 
-These rules MUST be followed without exception:
+### Backend Won't Start
+```bash
+# Check Python environment (requires 3.9+)
+python --version
+pip list | grep fastapi
 
-1. **Multi-tenant Filtering**: Every company-related query MUST filter by `company_id`
-2. **No Direct Environment Access**: Use `settings` object from `app/core/config.py`
-3. **Repository Pattern**: All DB access through repository classes
-4. **Structured Error Handling**: Use custom exceptions, handled by global middleware
-5. **No Sensitive Logging**: Never log passwords, API keys, or tokens
-
-## Development Workflow
-
-### Adding New Features
-1. Update database models in `app/db/models.py` if needed
-2. Create/update Pydantic schemas in `app/schemas/`
-3. Implement business logic in `app/services/`
-4. Add API endpoints in `app/api/`
-5. Update frontend components and pages
-6. Write tests for all layers
-7. Update API documentation
-
-### Testing Strategy
-- **Unit tests**: >80% coverage for backend business logic
-- **Integration tests**: API endpoints with real database
-- **E2E tests**: Critical user flows with Playwright
-- **Database tests**: Use **Testcontainers** for PostgreSQL+PGVector
-
-### Code Quality Standards
-- **Backend**: Black formatting, Ruff linting, MyPy type checking
-- **Frontend**: Prettier formatting, ESLint linting
-- **Pre-commit hooks**: All quality checks must pass before commit
-
-## Technology Stack Details
-
-### AI/ML Components
-- **Embedding Model**: `sentence-transformers/paraphrase-MiniLM-L3-v2` (384 dimensions, free model)
-- **Vector Database**: PostgreSQL with PGVector extension
-- **LLM Integration**: OpenRouter API with `microsoft/phi-3-mini-128k-instruct:free` (free model)
-  - OpenRouter provides access to multiple LLM providers through a unified API
-  - No OpenAI dependency required - uses standard HTTP requests via httpx
-  - Configurable model selection through environment variables
-- **Document Processing**: PyPDF, python-docx for text extraction
-- **Text Chunking**: Configurable chunk size (default 1000 chars, 200 overlap)
-
-### Infrastructure
-- **Development**: Docker Compose with PostgreSQL and Redis
-- **Deployment**: TBD (cloud deployment deferred for MVP)
-- **Monitoring**: Basic health checks and logging
-
-## Project Structure Context
-
-```
-apps/
-├── backend/          # FastAPI backend application
-│   ├── app/
-│   │   ├── api/      # API route handlers
-│   │   ├── core/     # Configuration and dependencies
-│   │   ├── db/       # Database models and connection
-│   │   ├── schemas/  # Pydantic data validation models
-│   │   ├── services/ # Business logic layer
-│   │   └── main.py   # FastAPI application entry point
-│   ├── alembic/      # Database migrations
-│   ├── tests/        # Backend tests
-│   └── requirements.txt
-└── frontend/         # React frontend application
-    ├── src/
-    │   ├── api/      # Backend API clients
-    │   ├── components/ # Reusable UI components
-    │   ├── pages/    # Page-level components
-    │   ├── store/    # Zustand state management
-    │   └── styles/   # Theme and styling
-    └── package.json
+# Verify database connection
+docker-compose ps
+docker-compose logs postgres
 ```
 
-## Important Implementation Notes
+### Frontend Build Errors
+```bash
+# Clear cache and reinstall dependencies
+rm -rf node_modules package-lock.json
+npm install
 
-- **Document Processing**: Asynchronous with status tracking (PROCESSING/COMPLETED/FAILED)
-- **Authentication**: Separate login flows for admins (email/password) and employees (employee_id only)
-- **Multi-tenancy**: Company-based isolation with strict filtering at database level
-- **Vector Search**: Similarity search within company boundaries using pgvector
-- **Error Handling**: Global FastAPI middleware for consistent error responses
-- **API Documentation**: Auto-generated OpenAPI/Swagger at `/docs` endpoint
+# Check Node.js version (requires 20+)
+node --version
+```
+
+### Database Connection Issues
+```bash
+# Test database connectivity
+docker-compose exec postgres pg_isready -U postgres
+
+# Reset database completely
+docker-compose down -v
+docker-compose up -d postgres redis
+# Wait 10 seconds, then initialize with dev data
+```
+
+### Port Conflicts
+```bash
+# Check what's using the ports
+lsof -i :3000  # Frontend
+lsof -i :8000  # Backend
+lsof -i :5432  # PostgreSQL
+
+# Kill processes if needed
+kill -9 $(lsof -ti:3000)
+```
+
+## Implementation Notes
+
+The system is currently in active development with comprehensive testing and monitoring features implemented. The codebase follows clean architecture principles with clear separation between API routes, business logic services, and data access layers.
+
+When making changes:
+1. Follow existing patterns in the codebase
+2. Maintain multi-tenant data isolation
+3. Update tests for new functionality
+4. Run linting and formatting before committing
+5. Test both admin and employee user flows
