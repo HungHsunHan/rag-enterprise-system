@@ -83,6 +83,216 @@ After setup, start all services:
 npm run dev
 ```
 
+## 🧑‍💻 Complete Setup Guide for New Users
+
+### Step 1: Clone and Navigate
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/rag-enterprise-system.git
+cd rag-enterprise-system
+```
+
+### Step 2: Environment Setup
+
+#### 2.1 Check Prerequisites
+```bash
+# Verify versions
+node --version    # Should be >= 20.0.0
+npm --version     # Should be >= 10.0.0  
+python --version  # Should be >= 3.9
+docker --version  # Docker Desktop should be running
+```
+
+#### 2.2 Create Environment File
+```bash
+# Copy the example environment file
+cp .env.example .env
+
+# Edit the .env file with your settings
+nano .env  # or use your preferred editor
+```
+
+**Required Environment Variables:**
+```env
+# OpenRouter API Key (Get free key from openrouter.ai)
+OPENROUTER_API_KEY=your-openrouter-api-key-here
+
+# Database Configuration
+DATABASE_URL=postgresql://postgres:password@localhost:5432/hr_chatbot
+
+# Security (Change in production!)
+SECRET_KEY=your-super-secret-key-change-this-in-production
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+
+# Application Settings
+ENVIRONMENT=development
+DEBUG=true
+
+# AI Model Configuration
+LLM_MODEL=microsoft/phi-3-mini-128k-instruct:free
+EMBEDDING_MODEL=sentence-transformers/paraphrase-MiniLM-L3-v2
+EMBEDDING_DIMENSION=384
+```
+
+### Step 3: Get Your OpenRouter API Key (Free!)
+
+1. **Visit OpenRouter**: Go to https://openrouter.ai/
+2. **Sign Up**: Create a free account
+3. **Get API Key**: Navigate to Keys section and create a new API key
+4. **Add to .env**: Paste your key in the `OPENROUTER_API_KEY` field
+
+**Note**: OpenRouter offers free models that work perfectly for development and testing!
+
+### Step 4: Automated Setup
+
+#### Option A: One-Command Setup (Recommended)
+```bash
+# This handles everything automatically
+./scripts/dev-setup.sh
+```
+
+#### Option B: Manual Setup (If automated setup fails)
+
+**4.1 Start Database Services**
+```bash
+# Start PostgreSQL and Redis
+docker-compose up -d postgres redis
+
+# Verify services are running
+docker-compose ps
+```
+
+**4.2 Setup Backend**
+```bash
+cd apps/backend
+
+# Create and activate Python environment
+conda create -n rag-system python=3.11
+conda activate rag-system
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run database migrations
+python -m alembic upgrade head
+
+# Initialize with development data
+cd ../..
+docker-compose exec -T postgres psql -U postgres -d hr_chatbot < create-dev-data.sql
+```
+
+**4.3 Setup Frontend**
+```bash
+cd apps/frontend
+
+# Install dependencies
+npm install
+
+# Return to root
+cd ../..
+```
+
+### Step 5: Start the Application
+
+```bash
+# From the root directory
+npm run dev
+```
+
+This will start:
+- **Frontend**: http://localhost:3000 (React development server)
+- **Backend**: http://localhost:8000 (FastAPI server with auto-reload)
+
+### Step 6: Verify Everything Works
+
+**6.1 Check Services**
+```bash
+# Backend health check
+curl http://localhost:8000/health
+
+# Should return: {"status": "healthy"}
+```
+
+**6.2 Test Login**
+- Open http://localhost:3000
+- Login with employee ID: `BRIAN001`
+- Should see the main chat interface
+
+**6.3 Test Admin Access**
+- Open http://localhost:3000/admin
+- Login with: `admin@dev.com` / `admin123`
+- Should see the admin dashboard
+
+### 🚨 Troubleshooting Common Issues
+
+#### Database Connection Errors
+```bash
+# Reset database completely
+docker-compose down -v
+docker-compose up -d postgres redis
+
+# Wait 10 seconds, then reinitialize
+sleep 10
+docker-compose exec -T postgres psql -U postgres -d hr_chatbot < create-dev-data.sql
+```
+
+#### Port Already in Use
+```bash
+# Find and kill processes using ports
+lsof -ti:3000 | xargs kill -9  # Frontend
+lsof -ti:8000 | xargs kill -9  # Backend
+lsof -ti:5432 | xargs kill -9  # PostgreSQL
+```
+
+#### Python Environment Issues
+```bash
+# Clean conda environment
+conda deactivate
+conda remove -n rag-system --all
+conda create -n rag-system python=3.11
+conda activate rag-system
+cd apps/backend && pip install -r requirements.txt
+```
+
+#### Frontend Build Issues
+```bash
+cd apps/frontend
+rm -rf node_modules package-lock.json
+npm install
+npm run dev
+```
+
+### 🎯 Next Steps After Setup
+
+1. **Explore the System**: Login as different users to see multi-tenancy
+2. **Upload Documents**: Test the knowledge management system
+3. **Try RAG Queries**: Ask questions about your documents
+4. **Admin Features**: Manage users and configure AI models
+5. **Run Tests**: `npm run test` to ensure everything works
+6. **Read Documentation**: Check the `docs/` folder for detailed guides
+
+### 🆘 Getting Help
+
+If you encounter issues:
+
+1. **Check the logs**: 
+   ```bash
+   docker-compose logs postgres
+   npm run dev  # Check terminal output
+   ```
+
+2. **Verify prerequisites**: Ensure all versions meet requirements
+
+3. **Clean setup**: Try the troubleshooting steps above
+
+4. **Open an issue**: Report problems on GitHub with:
+   - Your operating system
+   - Node.js/Python/Docker versions  
+   - Complete error messages
+   - Steps you tried
+
 ## 📍 Access Points
 
 Once running, you can access:
@@ -94,32 +304,153 @@ Once running, you can access:
 | **API Health Check** | http://localhost:8000/health | Backend health status |
 | **Admin Dashboard** | http://localhost:3000/admin | Administrative interface |
 
-## 🔑 Development Credentials
+## 📸 Screenshots & Interface
 
-### 👨‍💼 Admin Access (Full System Control)
+### 🔐 Login Interface
+
+The system provides separate login paths for employees and administrators with a clean, intuitive interface.
+
+![Login Page](images/login-page.png)
+
+*Clean dual-tab login interface supporting both employee ID authentication and admin email/password login*
+
+### 👩‍💻 Employee Interface
+
+#### Main Chat Interface
+![Employee Chat Interface](images/employee-chat-interface.png)
+
+*Company-scoped HR assistant interface with clean Material-UI design and user context display*
+
+
+
+**Key Employee Features:**
+- **Simple Employee ID Login** - No passwords required for streamlined employee access
+- **Company Context Display** - Clear indication of which employee and company is logged in
+- **Intelligent Chat Interface** - Natural language queries with AI-powered responses
+- **Conversation History** - Maintains chat history with clear user/assistant distinction
+- **Feedback System** - Thumbs up/down feedback for continuous improvement
+- **Responsive Design** - Works seamlessly across desktop, tablet, and mobile devices
+
+### 👨‍💼 Admin Interface
+
+#### Admin Dashboard Overview
+![Admin Dashboard](images/admin-dashboard.png)
+
+*Comprehensive admin dashboard with real-time metrics, company breakdowns, and system monitoring*
+
+#### Company Management
+![Admin Companies Page](images/admin-companies-page.png)
+
+*Full CRUD operations for company management with creation dates and bulk operations*
+
+#### Knowledge Base Management
+![Admin Knowledge Management](images/admin-knowledge-management.png)
+
+*Document upload, processing workflow, and knowledge base management with company-scoped control*
+
+#### User Feedback Dashboard
+![Admin Feedback Dashboard](images/admin-feedback-dashboard.png)
+
+*Company-scoped feedback monitoring and quality assurance with filtering capabilities*
+
+**Key Admin Features:**
+- **Real-time Metrics Dashboard** - Live statistics on companies, users, documents, and query activity
+- **Multi-Tenant Management** - Complete control over companies, users, and data isolation
+- **Knowledge Base Control** - Upload, process, and manage documents with shared/private settings
+- **System Monitoring** - Track user activity, feedback, and system performance
+- **Responsive Admin UI** - Clean navigation with comprehensive functionality across all devices
+
+### 🏢 Multi-Tenant Architecture in Action
+
+The interface demonstrates complete **multi-tenant data isolation**:
+
+1. **Employee View**: Users like `BRIAN001` see only their company's data plus shared resources
+2. **Admin View**: Full system visibility with company-breakdown analytics
+3. **Secure Context**: All interfaces respect company boundaries automatically
+4. **Shared Resources**: Documents marked as "共同" are accessible across companies
+5. **Role-Based UI**: Different interfaces and capabilities based on user role and company
+
+### 🎨 Design System
+
+**Material-UI Components:**
+- Consistent color scheme and typography
+- Responsive grid layouts and card-based design
+- Intuitive navigation with clear visual hierarchy
+- Accessible form controls and interactive elements
+- Professional dashboard layouts with data visualization
+
+## 🔑 Login Information & Development Credentials
+
+### 👨‍💼 Admin Login (Full System Control)
+
+Access the admin dashboard at http://localhost:3000/admin with:
+
 ```
 Email: admin@dev.com
 Password: admin123
 ```
-**Capabilities**: Company management, user administration, knowledge base management, system monitoring
 
-### 👩‍💻 Employee Access (Company-Scoped)
-Choose any employee ID to test multi-tenant isolation:
+**Admin Capabilities:**
+- 🏢 **Company Management**: Create, update, and manage companies
+- 👥 **User Administration**: Add, edit, and delete users across all companies  
+- 📚 **Global Knowledge Base**: Access all documents (company-specific + shared)
+- ⚙️ **System Configuration**: Manage LLM models, system settings
+- 📊 **Monitoring**: View system metrics and user activity
+- 🔐 **Security**: Manage access permissions and data isolation
 
-**Company A Employees:**
-- `BRIAN001` - **Brian** (Company A)
+### 👩‍💻 Employee Login (Company-Scoped Access)
 
-**Company B Employees:**
-- `TONY001` - **Tony** (Company B)
+Employees login using only their Employee ID (no password required in development). Access the main application at http://localhost:3000:
 
-**Company C Employees:**
-- `LISA001` - **Lisa** (Company C)
+#### **Company A Employees:**
+```
+Employee ID: BRIAN001
+Name: Brian
+Company: Company A
+```
 
-**Legacy Test Employees:**
-- `EMP001` (Alice Johnson), `EMP002` (Bob Smith) - **Acme Corp** employees
-- `DEV001` (Charlie Developer), `TEST001` (Diana Tester) - **Tech Innovations Inc** employees
+#### **Company B Employees:**
+```
+Employee ID: TONY001  
+Name: Tony
+Company: Company B
+```
 
-**Note**: Employee login only requires Employee ID (no password needed for development). Each employee can only access their company's documents plus any shared documents marked as "共同".
+#### **Company C Employees:**
+```
+Employee ID: LISA001
+Name: Lisa
+Company: Company C
+```
+
+#### **Legacy Test Employees:**
+
+**Acme Corp:**
+```
+Employee ID: EMP001    (Alice Johnson)
+Employee ID: EMP002    (Bob Smith)
+```
+
+**Tech Innovations Inc:**
+```
+Employee ID: DEV001    (Charlie Developer)
+Employee ID: TEST001   (Diana Tester)
+```
+
+### 🔐 Multi-Tenant Data Access Rules
+
+**Employee Access Rights:**
+- ✅ **Company Documents**: Access to all documents uploaded to their company
+- ✅ **Shared Documents**: Access to documents marked as "共同" (shared across companies)
+- ❌ **Other Company Documents**: Cannot access private documents from other companies
+- 📝 **RAG Queries**: Chat responses only include context from accessible documents
+
+**Testing Multi-Tenancy:**
+1. Login as `BRIAN001` → Upload a document → Only Brian and Company A employees can access it
+2. Login as admin → Mark a document as "共同" → All employees across companies can access it
+3. Login as `TONY001` → Cannot see Company A's private documents, but can see shared ones
+
+**Note**: This demonstrates complete data isolation while allowing controlled sharing of knowledge across the enterprise.
 
 ## 🛠 Development Commands
 
