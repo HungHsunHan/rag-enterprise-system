@@ -60,29 +60,60 @@ const ChatPage: React.FC = () => {
       timestamp: new Date()
     }
 
-    setMessages(prev => [...prev, userMessage])
+    const assistantMessageId = (Date.now() + 1).toString()
+    const initialAssistantMessage: Message = {
+      id: assistantMessageId,
+      type: 'assistant',
+      content: '',
+      timestamp: new Date()
+    }
+
+    setMessages(prev => [...prev, userMessage, initialAssistantMessage])
     setInputMessage('')
     setLoading(true)
 
     try {
-      const response = await userApi.askQuestion({ question: inputMessage })
+      let assistantContent = ''
       
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        type: 'assistant',
-        content: response.answer,
-        timestamp: new Date()
-      }
-      setMessages(prev => [...prev, assistantMessage])
-      setLoading(false)
+      await userApi.askQuestionStream(
+        { question: inputMessage },
+        // On token received
+        (token: string) => {
+          assistantContent += token
+          setMessages(prev => 
+            prev.map(msg => 
+              msg.id === assistantMessageId 
+                ? { ...msg, content: assistantContent }
+                : msg
+            )
+          )
+        },
+        // On completion
+        () => {
+          setLoading(false)
+        },
+        // On error
+        (error: string) => {
+          console.error('Streaming error:', error)
+          setMessages(prev => 
+            prev.map(msg => 
+              msg.id === assistantMessageId 
+                ? { ...msg, content: 'Sorry, I encountered an error while processing your question. Please try again.' }
+                : msg
+            )
+          )
+          setLoading(false)
+        }
+      )
     } catch (error) {
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        type: 'assistant',
-        content: 'Sorry, I encountered an error while processing your question. Please try again.',
-        timestamp: new Date()
-      }
-      setMessages(prev => [...prev, errorMessage])
+      console.error('Error in handleSendMessage:', error)
+      setMessages(prev => 
+        prev.map(msg => 
+          msg.id === assistantMessageId 
+            ? { ...msg, content: 'Sorry, I encountered an error while processing your question. Please try again.' }
+            : msg
+        )
+      )
       setLoading(false)
     }
   }
@@ -225,7 +256,16 @@ const ChatPage: React.FC = () => {
                       color: message.type === 'user' ? 'white' : 'text.primary'
                     }}
                   >
-                    <Typography variant="body1">{message.content}</Typography>
+                    {message.type === 'assistant' && !message.content && loading ? (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <CircularProgress size={16} />
+                        <Typography variant="body2" color="text.secondary">
+                          Thinking...
+                        </Typography>
+                      </Box>
+                    ) : (
+                      <Typography variant="body1">{message.content}</Typography>
+                    )}
                   </Paper>
                   
                   {message.type === 'assistant' && (
@@ -278,18 +318,6 @@ const ChatPage: React.FC = () => {
             </ListItem>
           ))}
           
-          {loading && (
-            <ListItem sx={{ flexDirection: 'column', alignItems: 'flex-start' }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Avatar sx={{ bgcolor: 'secondary.main', width: 32, height: 32 }}>
-                  A
-                </Avatar>
-                <Typography variant="body2" color="text.secondary">
-                  Thinking...
-                </Typography>
-              </Box>
-            </ListItem>
-          )}
         </List>
       </Paper>
       
