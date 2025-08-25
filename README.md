@@ -43,9 +43,50 @@ A comprehensive multi-tenant RAG-powered (Retrieval-Augmented Generation) enterp
 - **Comprehensive Testing**: 46 unit tests covering all functionality with >90% coverage
 - **Production Ready**: Advanced logging, error handling, monitoring, and performance optimization
 
-## 🚀 Two Ways to Deploy
+## 🚀 Three Ways to Deploy
 
-### Method 1: Build from Source Code (Development)
+### Method 1: Quick Deploy with Pre-built Docker Images ⚡ (Recommended)
+
+**Perfect for:** End users, testing, production deployment
+
+Get the system running in minutes using pre-built images from Docker Hub:
+
+```bash
+# Create deployment directory
+mkdir rag-enterprise-system && cd rag-enterprise-system
+
+# Download deployment files
+curl -O https://raw.githubusercontent.com/hunghsun/rag-enterprise-system/main/docker-compose.deploy.yml
+curl -O https://raw.githubusercontent.com/hunghsun/rag-enterprise-system/main/.env.production
+curl -O https://raw.githubusercontent.com/hunghsun/rag-enterprise-system/main/create-dev-data.sql
+
+# Configure environment
+cp .env.production .env
+# Edit .env with your OpenRouter API key and passwords
+
+# Deploy with pre-built images (automatically downloads from Docker Hub)
+docker-compose -f docker-compose.deploy.yml up -d
+
+# Initialize database (one-time setup)
+docker-compose -f docker-compose.deploy.yml exec backend python -m alembic upgrade head
+docker-compose -f docker-compose.deploy.yml exec -T postgres psql -U postgres -d hr_chatbot < create-dev-data.sql
+```
+
+**What gets deployed:**
+- ✅ `hunghsun/rag-enterprise-backend:latest` (~1.5GB) - FastAPI backend
+- ✅ `hunghsun/rag-enterprise-frontend:latest` (~61MB) - React frontend  
+- ✅ `pgvector/pgvector:pg16` (~464MB) - PostgreSQL with vector support
+- ✅ `redis:7-alpine` (~42MB) - Redis cache
+
+**Advantages:**
+- 🚀 **Fastest deployment** - No build time, just download and run
+- 💾 **Smaller footprint** - No source code needed locally
+- 🔄 **Easy updates** - `docker-compose pull` to get latest versions
+- 👥 **Perfect for teams** - Colleagues can deploy without development setup
+
+### Method 2: Build from Source Code (Development)
+
+**Perfect for:** Developers, customization, contributing
 
 #### Prerequisites
 - Docker & Docker Compose installed
@@ -70,29 +111,11 @@ docker-compose -f docker-compose.production.yml exec backend python -m alembic u
 docker-compose -f docker-compose.production.yml exec -T postgres psql -U postgres -d hr_chatbot < create-dev-data.sql
 ```
 
-### Method 2: Use Pre-built Images (Quick Deployment)
+### Method 3: Local Development Setup
 
-#### For Docker Hub Images
-```bash
-# Create project directory
-mkdir rag-enterprise-system && cd rag-enterprise-system
+**Perfect for:** Active development, debugging, contributing code
 
-# Download deployment files
-wget https://raw.githubusercontent.com/<username>/<repo>/main/docker-compose.production.yml
-wget https://raw.githubusercontent.com/<username>/<repo>/main/create-dev-data.sql
-wget https://raw.githubusercontent.com/<username>/<repo>/main/.env.production
-
-# Configure environment
-cp .env.production .env
-# Edit .env with your settings
-
-# Deploy with pre-built images
-docker-compose -f docker-compose.production.yml up -d
-
-# Initialize database
-docker-compose -f docker-compose.production.yml exec backend python -m alembic upgrade head
-docker-compose -f docker-compose.production.yml exec -T postgres psql -U postgres -d hr_chatbot < create-dev-data.sql
-```
+See [Development Setup](#-development-setup-optional) section below for detailed instructions.
 
 ## 🌐 Access Points
 
@@ -126,12 +149,35 @@ DELETE FROM users WHERE employee_id IN ('BRIAN001', 'TONY001', 'LISA001', 'DEV00
 
 ## 🔧 Management Commands
 
+### For Pre-built Image Deployment (Method 1)
+```bash
+# View logs
+docker-compose -f docker-compose.deploy.yml logs -f
+
+# Stop services  
+docker-compose -f docker-compose.deploy.yml down
+
+# Update to latest images
+docker-compose -f docker-compose.deploy.yml pull
+docker-compose -f docker-compose.deploy.yml up -d
+
+# Restart service
+docker-compose -f docker-compose.deploy.yml restart backend
+
+# Database access
+docker-compose -f docker-compose.deploy.yml exec postgres psql -U postgres -d hr_chatbot
+```
+
+### For Source Code Deployment (Method 2)
 ```bash
 # View logs
 docker-compose -f docker-compose.production.yml logs -f
 
 # Stop services
 docker-compose -f docker-compose.production.yml down
+
+# Rebuild and restart
+docker-compose -f docker-compose.production.yml up -d --build
 
 # Restart service
 docker-compose -f docker-compose.production.yml restart backend
@@ -146,17 +192,42 @@ docker-compose -f docker-compose.production.yml exec postgres psql -U postgres -
 
 1. **Port Conflicts**
 ```bash
+# Check what's using the ports
 lsof -i :4000 -i :5433 -i :6380 -i :9000
 ```
 
 2. **Services Not Healthy**
 ```bash
+# For Method 1 (Docker Hub)
+docker-compose -f docker-compose.deploy.yml logs backend
+
+# For Method 2 (Source Code)
 docker-compose -f docker-compose.production.yml logs backend
 ```
 
 3. **Database Issues**
 ```bash
+# For Method 1 (Docker Hub)
+docker-compose -f docker-compose.deploy.yml exec postgres pg_isready -U postgres
+
+# For Method 2 (Source Code)
 docker-compose -f docker-compose.production.yml exec postgres pg_isready -U postgres
+```
+
+4. **Docker Images Not Found**
+```bash
+# Manually pull images from Docker Hub
+docker pull hunghsun/rag-enterprise-backend:latest
+docker pull hunghsun/rag-enterprise-frontend:latest
+docker pull pgvector/pgvector:pg16
+docker pull redis:7-alpine
+```
+
+5. **Environment Variables Missing**
+```bash
+# Check if .env file exists and has required variables
+cat .env
+# Required: OPENROUTER_API_KEY, SECRET_KEY, POSTGRES_PASSWORD, REDIS_PASSWORD
 ```
 
 ## 📸 Screenshots & Interface
@@ -454,6 +525,27 @@ The system uses PostgreSQL with PGVector extension and the following core tables
 # Run tests (development setup only)
 npm run test
 ```
+
+## 📦 Docker Hub Images
+
+Pre-built images are available on Docker Hub for instant deployment:
+
+| Image | Size | Purpose | Docker Hub Link |
+|-------|------|---------|----------------|
+| `hunghsun/rag-enterprise-backend` | ~1.5GB | FastAPI backend with all dependencies | [View on Hub](https://hub.docker.com/r/hunghsun/rag-enterprise-backend) |
+| `hunghsun/rag-enterprise-frontend` | ~61MB | React frontend with Nginx | [View on Hub](https://hub.docker.com/r/hunghsun/rag-enterprise-frontend) |
+| `pgvector/pgvector:pg16` | ~464MB | PostgreSQL with vector support | [Official Image](https://hub.docker.com/r/pgvector/pgvector) |
+| `redis:7-alpine` | ~42MB | Redis cache | [Official Image](https://hub.docker.com/r/_/redis) |
+
+**Image Tags:**
+- `latest` - Always the most recent stable version
+- Version-specific tags available for production pinning
+
+**Deployment Advantages:**
+- ✅ **No Build Time** - Images are pre-built and optimized
+- ✅ **Consistent Environment** - Same images across dev/staging/prod
+- ✅ **Easy CI/CD** - Simple pull and deploy workflow
+- ✅ **Team Collaboration** - Anyone can deploy without source code
 
 ## 🔒 Security Features
 
