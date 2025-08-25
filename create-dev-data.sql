@@ -62,16 +62,16 @@ ON CONFLICT (id) DO NOTHING;
 
 -- Insert development admin (password: admin123)
 -- Hash generated with: python3 -c "from passlib.context import CryptContext; pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto'); print(pwd_context.hash('admin123'))"
-INSERT INTO admins (email, password_hash) VALUES 
-    ('admin@dev.com', '$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW')
+INSERT INTO admins (id, email, password_hash) VALUES 
+    (uuid_generate_v4(), 'admin@dev.com', '$2b$12$zZL/yfr1h7bHi0aVjK/3j.TkCeraBgJViVTwSPxogMRxbxed/8pvi')
 ON CONFLICT (email) DO NOTHING;
 
--- Insert development users
-INSERT INTO users (employee_id, company_id) VALUES 
-    ('EMP001', '550e8400-e29b-41d4-a716-446655440001'),
-    ('EMP002', '550e8400-e29b-41d4-a716-446655440001'),
-    ('DEV001', '550e8400-e29b-41d4-a716-446655440002'),
-    ('TEST001', '550e8400-e29b-41d4-a716-446655440002')
+-- Insert development users with names
+INSERT INTO users (id, employee_id, company_id, name) VALUES 
+    (uuid_generate_v4(), 'BRIAN001', '550e8400-e29b-41d4-a716-446655440001', 'Brian Zhang'),
+    (uuid_generate_v4(), 'TONY001', '550e8400-e29b-41d4-a716-446655440001', 'Tony Chen'),
+    (uuid_generate_v4(), 'LISA001', '550e8400-e29b-41d4-a716-446655440002', 'Lisa Wang'),
+    (uuid_generate_v4(), 'DEV001', '550e8400-e29b-41d4-a716-446655440002', 'Developer User')
 ON CONFLICT (company_id, employee_id) DO NOTHING;
 
 -- Display created data
@@ -82,4 +82,4 @@ SELECT 'Admins:' as info;
 SELECT email FROM admins;
 
 SELECT 'Users:' as info;
-SELECT u.employee_id, c.name as company FROM users u JOIN companies c ON u.company_id = c.id;
+SELECT u.employee_id, u.name, c.name as company FROM users u JOIN companies c ON u.company_id = c.id ORDER BY c.name, u.employee_id;

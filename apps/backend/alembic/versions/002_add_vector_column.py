@@ -20,10 +20,8 @@ def upgrade() -> None:
     # Add chunk_index column
     op.add_column('document_chunks', sa.Column('chunk_index', sa.Integer(), nullable=False, server_default='0'))
     
-    # Add embedding column with vector type
-    op.execute('ALTER TABLE document_chunks ADD COLUMN embedding vector(384)')
-    
-    # Create HNSW index for vector similarity search
+    # The embedding column is already created in migration 001, so we skip it
+    # Just ensure the HNSW index exists with a specific name
     op.execute('CREATE INDEX IF NOT EXISTS idx_document_chunks_embedding ON document_chunks USING hnsw (embedding vector_l2_ops)')
 
 
@@ -31,8 +29,6 @@ def downgrade() -> None:
     # Drop the vector index
     op.execute('DROP INDEX IF EXISTS idx_document_chunks_embedding')
     
-    # Drop the embedding column
-    op.drop_column('document_chunks', 'embedding')
-    
-    # Drop chunk_index column
+    # Don't drop the embedding column as it was created in migration 001
+    # Only drop the chunk_index column that we added in this migration
     op.drop_column('document_chunks', 'chunk_index')

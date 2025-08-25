@@ -1,0 +1,140 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database with PGVector
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: rag_postgres_prod
+    environment:
+      POSTGRES_DB: hr_chatbot
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-production_password_change_me}
+    ports:
+      - "5433:5432"  # Different from dev port 5432
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data
+      - ./apps/backend/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - rag_network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: rag_redis_prod
+    ports:
+      - "6380:6379"  # Different from dev port 6379
+    volumes:
+      - redis_prod_data:/data
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_production_password}
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - rag_network
+
+  # Backend FastAPI Service
+  backend:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
+    container_name: rag_backend_prod
+    environment:
+      # Database
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-production_password_change_me}@postgres:5432/hr_chatbot
+      
+      # Security
+      SECRET_KEY: ${SECRET_KEY:-change-this-secret-key-in-production}
+      ACCESS_TOKEN_EXPIRE_MINUTES: 30
+      
+      # LLM API
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      LLM_MODEL: ${LLM_MODEL:-openai/gpt-4o-mini}
+      
+      # Embedding
+      EMBEDDING_MODEL: sentence-transformers/paraphrase-MiniLM-L3-v2
+      EMBEDDING_DIMENSION: 384
+      
+      # File Upload
+      MAX_FILE_SIZE: 10485760
+      ALLOWED_FILE_TYPES: '[".pdf",".docx",".txt"]'
+      
+      # Text Processing
+      CHUNK_SIZE: 1000
+      CHUNK_OVERLAP: 200
+      
+      # CORS
+      BACKEND_CORS_ORIGINS: '["http://localhost:4000","http://127.0.0.1:4000"]'
+      
+      # Redis
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_production_password}@redis:6379/0
+    ports:
+      - "9000:9000"  # Different from dev port 8001
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - backend_logs:/app/logs
+      - backend_uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - rag_network
+
+  # Frontend React + Nginx Service
+  frontend:
+    build:
+      context: ./apps/frontend
+      dockerfile: Dockerfile
+    container_name: rag_frontend_prod
+    environment:
+      BACKEND_HOST: backend
+      BACKEND_PORT: 9000
+    ports:
+      - "4000:4000"  # Different from dev port 3000
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - rag_network
+
+# Networks
+networks:
+  rag_network:
+    driver: bridge
+    name: rag_production_network
+
+# Volumes
+volumes:
+  postgres_prod_data:
+    name: rag_postgres_prod_data
+  redis_prod_data:
+    name: rag_redis_prod_data
+  backend_logs:
+    name: rag_backend_logs
+  backend_uploads:
+    name: rag_backend_uploads
